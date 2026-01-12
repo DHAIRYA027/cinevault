@@ -168,32 +168,48 @@ app.get('/api/tv/:id/season/:seasonNumber/episode/:episodeNumber', async (req, r
 
 // 👇 2. NEW: WATCHLIST ROUTES
 
-// Add to Watchlist
+// Add to Watchlist (With Logs)
 app.post('/api/watchlist', async (req, res) => {
   try {
+    console.log("📥 Add Watchlist Request Received:", req.body); // 👈 LOG THE INPUT
+
     const { userId, movie } = req.body;
-    await Watchlist.findOneAndUpdate(
+    
+    if (!userId || !movie || !movie.tmdbId) {
+        console.log("❌ Missing Data:", { userId, movie });
+        return res.status(400).json({ error: "Invalid data" });
+    }
+
+    const savedItem = await Watchlist.findOneAndUpdate(
       { userId, tmdbId: movie.tmdbId }, 
       { ...movie, userId },             
       { upsert: true, new: true }       
     );
+    
+    console.log("✅ Successfully Saved to DB:", savedItem); // 👈 LOG THE SUCCESS
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: "Failed to add" }); }
+  } catch (err) { 
+    console.error("🔥 Save Error:", err);
+    res.status(500).json({ error: "Failed to add" }); 
+  }
 });
 
 // Remove from Watchlist
 app.delete('/api/watchlist/:userId/:tmdbId', async (req, res) => {
   try {
     const { userId, tmdbId } = req.params;
+    console.log(`🗑️ Removing: User ${userId}, Movie ${tmdbId}`);
     await Watchlist.findOneAndDelete({ userId, tmdbId });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: "Failed to remove" }); }
 });
 
-// Get User's Watchlist
+// Get User's Watchlist (With Logs)
 app.get('/api/watchlist/:userId', async (req, res) => {
   try {
+    console.log(`🔍 Fetching List for User: ${req.params.userId}`);
     const list = await Watchlist.find({ userId: req.params.userId }).sort({ addedAt: -1 });
+    console.log(`📄 Found ${list.length} items`);
     res.json(list);
   } catch (err) { res.status(500).json({ error: "Failed to fetch list" }); }
 });
