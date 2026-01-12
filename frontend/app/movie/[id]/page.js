@@ -74,32 +74,84 @@ export default function MoviePage() {
         return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     };
 
-    // 👇 SMART LINK LOGIC
+    // 👇 SMART LINK LOGIC (Platform Detector)
     const getWatchLink = () => {
         if (!movie) return null;
 
-        // 1. Check Homepage for direct streaming links (Netflix/Prime/Hotstar)
-        const streamingDomains = ['netflix.com', 'primevideo.com', 'hotstar.com', 'jiocinema.com', 'apple.com', 'hulu.com', 'disneyplus.com'];
-        if (movie.homepage && streamingDomains.some(d => movie.homepage.includes(d))) {
-            return { url: movie.homepage, label: 'Stream Now' };
+        // 1. Prioritize Homepage if it matches a known streaming site
+        const homepage = movie.homepage || '';
+        if (homepage.includes('netflix.com')) return { url: homepage, label: 'Watch on Netflix', color: 'bg-red-600 hover:bg-red-700 text-white' };
+        if (homepage.includes('primevideo.com')) return { url: homepage, label: 'Watch on Prime', color: 'bg-blue-500 hover:bg-blue-600 text-white' };
+        if (homepage.includes('hotstar.com')) return { url: homepage, label: 'Watch on Hotstar', color: 'bg-[#0c112b] hover:bg-[#1f2851] text-white border border-white/20' };
+
+        // 2. Check "Providers" Data (What platform has the rights in India?)
+        if (movie.providers && movie.providers.IN) {
+            const IN = movie.providers.IN;
+            // combine flatrate (subscription) and free
+            const sources = [...(IN.flatrate || []), ...(IN.free || [])];
+
+            const findProvider = (name) => sources.find(p => p.provider_name.toLowerCase().includes(name));
+
+            // Netflix
+            if (findProvider('netflix')) {
+                return { 
+                    url: `https://www.netflix.com/search?q=${encodeURIComponent(movie.title)}`, 
+                    label: 'Watch on Netflix',
+                    color: 'bg-[#E50914] hover:bg-[#b20710] text-white'
+                };
+            }
+            // Amazon Prime
+            if (findProvider('amazon prime')) {
+                return { 
+                    url: `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${encodeURIComponent(movie.title)}`, 
+                    label: 'Watch on Prime',
+                    color: 'bg-[#00A8E1] hover:bg-[#008dbd] text-white'
+                };
+            }
+            // Hotstar / Disney+
+            if (findProvider('hotstar')) {
+                return { 
+                    url: `https://www.hotstar.com/in/search?q=${encodeURIComponent(movie.title)}`, 
+                    label: 'Watch on Hotstar',
+                    color: 'bg-[#131A27] hover:bg-[#202A3D] text-white border border-white/20'
+                };
+            }
+            // JioCinema
+            if (findProvider('jiocinema')) {
+                return { 
+                    url: `https://www.jiocinema.com/search/${encodeURIComponent(movie.title)}`, 
+                    label: 'Watch on JioCinema',
+                    color: 'bg-[#D4237E] hover:bg-[#b01c68] text-white'
+                };
+            }
+            // Crunchyroll (Anime)
+            if (findProvider('crunchyroll')) {
+                return { 
+                    url: `https://www.crunchyroll.com/search?q=${encodeURIComponent(movie.title)}`, 
+                    label: 'Watch on Crunchyroll',
+                    color: 'bg-[#F47521] hover:bg-[#d66015] text-white'
+                };
+            }
         }
 
-        // 2. Check Providers (Official Sources)
-        // Note: TMDB API 'link' usually points to a landing page, but it's the most accurate source.
-        if (movie.providers?.IN?.link) return { url: movie.providers.IN.link, label: 'Watch Options' };
-        if (movie.providers?.US?.link) return { url: movie.providers.US.link, label: 'Watch Options' };
+        // 3. Fallback: Official Watch Options Page from API
+        if (movie.providers?.IN?.link) return { url: movie.providers.IN.link, label: 'Watch Options', color: 'bg-white text-black hover:scale-105' };
+        if (movie.providers?.US?.link) return { url: movie.providers.US.link, label: 'Watch Options', color: 'bg-white text-black hover:scale-105' };
 
-        // 3. Fallback: Google Search
-        const query = encodeURIComponent(`watch ${movie.title} online`);
-        return { url: `https://www.google.com/search?q=${query}`, label: 'Find Where to Watch' };
+        // 4. Last Resort: Google Search
+        return { 
+            url: `https://www.google.com/search?q=watch+${encodeURIComponent(movie.title)}+online`, 
+            label: 'Find Where to Watch',
+            color: 'bg-white/10 text-white hover:bg-white/20'
+        };
     };
 
     const watchAction = getWatchLink();
 
-    // 👇 MERGE REVIEWS (Local + Public)
+    // Combine Local and Public Reviews
     const allReviews = [
-        ...(movie?.userReviews || []), // Your Local Users
-        ...(movie?.reviews || [])      // TMDB Public Reviews
+        ...(movie?.userReviews || []),
+        ...(movie?.reviews || [])
     ];
 
     if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-bold text-xl">Loading...</div>;
@@ -168,8 +220,8 @@ export default function MoviePage() {
                             {/* SMART WATCH BUTTON */}
                             {watchAction ? (
                                 <a href={watchAction.url} target="_blank" rel="noopener noreferrer">
-                                    <button className="bg-white text-black px-8 py-3 rounded-full font-bold text-lg flex items-center gap-2 hover:scale-105 transition shadow-[0_0_20px_rgba(255,255,255,0.3)]">
-                                        <PlayCircle size={24} fill="black" /> {watchAction.label}
+                                    <button className={`${watchAction.color} px-8 py-3 rounded-full font-bold text-lg flex items-center gap-2 transition shadow-[0_0_20px_rgba(255,255,255,0.2)]`}>
+                                        <PlayCircle size={24} fill="currentColor" /> {watchAction.label}
                                     </button>
                                 </a>
                             ) : (
@@ -215,7 +267,7 @@ export default function MoviePage() {
                         </section>
                     )}
 
-                    {/* REVIEWS SECTION (COMBINED) */}
+                    {/* REVIEWS SECTION */}
                     <section>
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-2xl font-bold flex items-center gap-2">
@@ -239,24 +291,17 @@ export default function MoviePage() {
                                 allReviews.map((review, i) => (
                                     <div key={i} className="bg-white/5 p-6 rounded-xl border border-white/5">
                                         <div className="flex items-center justify-between mb-2">
-                                            {/* Author Name */}
                                             <span className="font-bold text-cyan-400">
                                                 {review.author || review.author_details?.username || "Anonymous"}
                                             </span>
-                                            
-                                            {/* Date Logic (Handles both formats) */}
                                             <span className="text-xs text-gray-500">
                                                 {review.date ? new Date(review.date).toLocaleDateString() : review.created_at ? new Date(review.created_at).toLocaleDateString() : ''}
                                             </span>
                                         </div>
-                                        
-                                        {/* Rating Logic (Handles both formats) */}
                                         <div className="flex items-center gap-1 text-yellow-400 text-xs mb-3">
                                             <Star size={12} fill="currentColor" /> 
                                             {review.rating || review.author_details?.rating || '?'} / 10
                                         </div>
-                                        
-                                        {/* Content */}
                                         <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">
                                             {review.content}
                                         </p>
@@ -283,6 +328,11 @@ export default function MoviePage() {
                             {movie.budget > 0 && (<div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><DollarSign size={14} /> Budget</span> <span className="font-medium text-green-400">{formatMoney(movie.budget)}</span></div>)}
                              {movie.revenue > 0 && (<div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><Activity size={14} /> Revenue</span> <span className="font-medium text-green-400">{formatMoney(movie.revenue)}</span></div>)}
                             <div className="flex justify-between items-center"><span className="text-gray-500">Status</span> <span className={`px-2 py-0.5 rounded text-xs font-bold ${movie.status === 'Released' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{movie.status || 'Released'}</span></div>
+                        </div>
+                        
+                        <div className="pt-4 border-t border-white/5 space-y-3">
+                            <div><span className="block text-gray-500 text-xs mb-1">Director</span> <span className="font-medium">{movie.directors?.join(', ') || 'Unknown'}</span></div>
+                            <div><span className="block text-gray-500 text-xs mb-1">Writers</span> <span className="font-medium">{movie.writers?.join(', ') || 'Unknown'}</span></div>
                         </div>
                     </div>
 
