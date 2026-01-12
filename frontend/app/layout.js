@@ -1,7 +1,6 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ClerkProvider } from '@clerk/nextjs';
-import { dark } from '@clerk/themes';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -12,9 +11,9 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
+    // 👇 Updated ClerkProvider (removed the 'dark' theme reference)
     <ClerkProvider
       appearance={{
-        baseTheme: dark,
         variables: { 
             colorPrimary: '#22d3ee', 
             colorBackground: '#111',
