@@ -34,7 +34,8 @@ export default function WatchlistButton({ movie }) {
                 await axios.post(`${API_BASE_URL}/api/watchlist`, {
                     userId: user.id,
                     movie: {
-                        tmdbId: movie.tmdbId,
+                        // 👇 Safety: Use tmdbId OR id, and ensure it's a Number
+                        tmdbId: Number(movie.tmdbId || movie.id), 
                         title: movie.title || movie.name,
                         poster_path: movie.poster_path,
                         vote_average: movie.vote_average,
