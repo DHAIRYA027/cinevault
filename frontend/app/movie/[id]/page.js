@@ -74,19 +74,33 @@ export default function MoviePage() {
         return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     };
 
-    // 👇 LOGIC TO FIND STREAMING LINK
+    // 👇 SMART LINK LOGIC
     const getWatchLink = () => {
-        if (!movie || !movie.providers) return null;
-        // 1. Try India (IN) first
-        if (movie.providers.IN && movie.providers.IN.link) return movie.providers.IN.link;
-        // 2. Fallback to US
-        if (movie.providers.US && movie.providers.US.link) return movie.providers.US.link;
-        // 3. Fallback to Homepage if available
-        if (movie.homepage) return movie.homepage;
-        return null;
+        if (!movie) return null;
+
+        // 1. Check Homepage for direct streaming links (Netflix/Prime/Hotstar)
+        const streamingDomains = ['netflix.com', 'primevideo.com', 'hotstar.com', 'jiocinema.com', 'apple.com', 'hulu.com', 'disneyplus.com'];
+        if (movie.homepage && streamingDomains.some(d => movie.homepage.includes(d))) {
+            return { url: movie.homepage, label: 'Stream Now' };
+        }
+
+        // 2. Check Providers (Official Sources)
+        // Note: TMDB API 'link' usually points to a landing page, but it's the most accurate source.
+        if (movie.providers?.IN?.link) return { url: movie.providers.IN.link, label: 'Watch Options' };
+        if (movie.providers?.US?.link) return { url: movie.providers.US.link, label: 'Watch Options' };
+
+        // 3. Fallback: Google Search
+        const query = encodeURIComponent(`watch ${movie.title} online`);
+        return { url: `https://www.google.com/search?q=${query}`, label: 'Find Where to Watch' };
     };
 
-    const watchLink = getWatchLink();
+    const watchAction = getWatchLink();
+
+    // 👇 MERGE REVIEWS (Local + Public)
+    const allReviews = [
+        ...(movie?.userReviews || []), // Your Local Users
+        ...(movie?.reviews || [])      // TMDB Public Reviews
+    ];
 
     if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-bold text-xl">Loading...</div>;
     if (!movie) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-bold text-xl">Movie not found</div>;
@@ -128,10 +142,9 @@ export default function MoviePage() {
                             <span className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full"><Calendar size={14} /> {movie.release_date?.split('-')[0]}</span>
                             {movie.runtime && <span className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full"><Clock size={14} /> {formatRuntime(movie.runtime)}</span>}
                             
-                            {/* FIX FOR RANDOM NUMBERS: Check if genre is a string (new backend) or number (old data) */}
                             {movie.genres?.slice(0,3).map(g => (
                                 <span key={g} className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full text-xs">
-                                    {typeof g === 'string' ? g : 'Update Backend'}
+                                    {typeof g === 'string' ? g : 'Reload Page'}
                                 </span>
                             ))}
                         </div>
@@ -152,11 +165,11 @@ export default function MoviePage() {
                         {/* ACTION BUTTONS */}
                         <div className="flex flex-wrap items-center gap-4 pt-4">
                             
-                            {/* 👇 NEW WATCH BUTTON LOGIC */}
-                            {watchLink ? (
-                                <a href={watchLink} target="_blank" rel="noopener noreferrer">
+                            {/* SMART WATCH BUTTON */}
+                            {watchAction ? (
+                                <a href={watchAction.url} target="_blank" rel="noopener noreferrer">
                                     <button className="bg-white text-black px-8 py-3 rounded-full font-bold text-lg flex items-center gap-2 hover:scale-105 transition shadow-[0_0_20px_rgba(255,255,255,0.3)]">
-                                        <PlayCircle size={24} fill="black" /> Stream Now
+                                        <PlayCircle size={24} fill="black" /> {watchAction.label}
                                     </button>
                                 </a>
                             ) : (
@@ -171,7 +184,7 @@ export default function MoviePage() {
                 </div>
             </div>
 
-            {/* REST OF PAGE (Cast, Photos, Reviews, Info) */}
+            {/* REST OF PAGE */}
             <div className="max-w-[1800px] mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-3 gap-12">
                 <div className="lg:col-span-2 space-y-12">
                     <section>
@@ -191,7 +204,6 @@ export default function MoviePage() {
                         </div>
                     </section>
                     
-                    {/* Photos */}
                     {movie.screenshots && movie.screenshots.length > 0 && (
                         <section>
                             <h3 className="text-2xl font-bold flex items-center gap-2 mb-6"><ImageIcon className="text-purple-400" /> Photos</h3>
@@ -203,12 +215,15 @@ export default function MoviePage() {
                         </section>
                     )}
 
-                    {/* Reviews */}
+                    {/* REVIEWS SECTION (COMBINED) */}
                     <section>
                         <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-2xl font-bold flex items-center gap-2"><MessageSquare className="text-green-400" /> User Reviews</h3>
+                            <h3 className="text-2xl font-bold flex items-center gap-2">
+                                <MessageSquare className="text-green-400" /> Reviews <span className="text-gray-500 text-lg">({allReviews.length})</span>
+                            </h3>
                             <button onClick={() => setShowReviewForm(!showReviewForm)} className="text-sm font-bold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full transition flex items-center gap-2"><Plus size={16} /> Write Review</button>
                         </div>
+                        
                         {showReviewForm && (
                             <form onSubmit={handleReviewSubmit} className="bg-white/5 p-6 rounded-2xl mb-8 border border-white/10 animate-in fade-in slide-in-from-top-2">
                                 <textarea className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-cyan-500 outline-none min-h-[100px]" placeholder="Write your thoughts..." value={reviewContent} onChange={e => setReviewContent(e.target.value)} required />
@@ -218,13 +233,33 @@ export default function MoviePage() {
                                 </div>
                             </form>
                         )}
+
                         <div className="space-y-4">
-                            {movie.userReviews?.length > 0 ? (
-                                movie.userReviews.map((review, i) => (
+                            {allReviews.length > 0 ? (
+                                allReviews.map((review, i) => (
                                     <div key={i} className="bg-white/5 p-6 rounded-xl border border-white/5">
-                                        <div className="flex items-center justify-between mb-2"><span className="font-bold text-cyan-400">{review.author}</span><span className="text-xs text-gray-500">{new Date(review.date).toLocaleDateString()}</span></div>
-                                        <div className="flex items-center gap-1 text-yellow-400 text-xs mb-3"><Star size={12} fill="currentColor" /> {review.rating}/10</div>
-                                        <p className="text-gray-300 text-sm leading-relaxed">{review.content}</p>
+                                        <div className="flex items-center justify-between mb-2">
+                                            {/* Author Name */}
+                                            <span className="font-bold text-cyan-400">
+                                                {review.author || review.author_details?.username || "Anonymous"}
+                                            </span>
+                                            
+                                            {/* Date Logic (Handles both formats) */}
+                                            <span className="text-xs text-gray-500">
+                                                {review.date ? new Date(review.date).toLocaleDateString() : review.created_at ? new Date(review.created_at).toLocaleDateString() : ''}
+                                            </span>
+                                        </div>
+                                        
+                                        {/* Rating Logic (Handles both formats) */}
+                                        <div className="flex items-center gap-1 text-yellow-400 text-xs mb-3">
+                                            <Star size={12} fill="currentColor" /> 
+                                            {review.rating || review.author_details?.rating || '?'} / 10
+                                        </div>
+                                        
+                                        {/* Content */}
+                                        <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">
+                                            {review.content}
+                                        </p>
                                     </div>
                                 ))
                             ) : (<p className="text-gray-500 italic">No reviews yet. Be the first to review!</p>)}
@@ -232,6 +267,7 @@ export default function MoviePage() {
                     </section>
                 </div>
 
+                {/* Right Info Column */}
                 <div className="space-y-8">
                     {movie.trailerKey && (
                         <div className="rounded-2xl overflow-hidden border border-white/10 bg-black shadow-2xl">
@@ -247,10 +283,6 @@ export default function MoviePage() {
                             {movie.budget > 0 && (<div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><DollarSign size={14} /> Budget</span> <span className="font-medium text-green-400">{formatMoney(movie.budget)}</span></div>)}
                              {movie.revenue > 0 && (<div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><Activity size={14} /> Revenue</span> <span className="font-medium text-green-400">{formatMoney(movie.revenue)}</span></div>)}
                             <div className="flex justify-between items-center"><span className="text-gray-500">Status</span> <span className={`px-2 py-0.5 rounded text-xs font-bold ${movie.status === 'Released' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{movie.status || 'Released'}</span></div>
-                        </div>
-                        <div className="pt-4 border-t border-white/5 space-y-3">
-                            <div><span className="block text-gray-500 text-xs mb-1">Director</span> <span className="font-medium">{movie.directors?.join(', ') || 'Unknown'}</span></div>
-                            <div><span className="block text-gray-500 text-xs mb-1">Writers</span> <span className="font-medium">{movie.writers?.join(', ') || 'Unknown'}</span></div>
                         </div>
                     </div>
 
