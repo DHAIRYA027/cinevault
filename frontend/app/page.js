@@ -98,79 +98,83 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white selection:bg-cyan-500/30 pb-20">
       
-      {/* FIXED NAVBAR */}
+      {/* NAVBAR */}
       <nav className="fixed top-0 w-full z-50 bg-black/80 backdrop-blur-md border-b border-white/5 shadow-2xl transition-all duration-300">
         <div className="max-w-[1800px] mx-auto px-6 h-16 flex items-center justify-between gap-4">
             
-            {/* 1. LEFT: LOGO */}
-            <Link href="/" className="shrink-0">
-            <div className="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 cursor-pointer drop-shadow-lg">
-                CineVault
-            </div>
+            {/* 1. LEFT: LOGO (Flex container to ensure vertical center) */}
+            <Link href="/" className="shrink-0 flex items-center">
+                <div className="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 cursor-pointer drop-shadow-lg">
+                    CineVault
+                </div>
             </Link>
             
-            {/* 2. CENTER: SEARCH BAR (Centered & Height Fixed) */}
+            {/* 2. CENTER: SEARCH BAR */}
             <div className="relative flex-1 max-w-xl mx-auto hidden sm:block">
-            <form onSubmit={handleSearchSubmit} className="relative group">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-cyan-400 transition" size={18} />
-                <input 
-                type="text" 
-                placeholder="Search movies, TV shows, anime..." 
-                className="w-full h-10 bg-white/5 border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:bg-white/10 transition text-white placeholder-gray-500"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => searchQuery.length > 2 && setShowSuggestions(true)}
-                />
-                {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-cyan-500" size={16} />}
-            </form>
+                <form onSubmit={handleSearchSubmit} className="relative group flex items-center">
+                    <Search className="absolute left-3 text-gray-500 group-focus-within:text-cyan-400 transition" size={18} />
+                    <input 
+                    type="text" 
+                    placeholder="Search movies, TV shows, anime..." 
+                    className="w-full h-10 bg-white/5 border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:bg-white/10 transition text-white placeholder-gray-500"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onFocus={() => searchQuery.length > 2 && setShowSuggestions(true)}
+                    />
+                    {isSearching && <Loader2 className="absolute right-3 animate-spin text-cyan-500" size={16} />}
+                </form>
 
-            {/* Live Suggestions Dropdown */}
-            {showSuggestions && suggestions.length > 0 && (
-                <div className="absolute top-full mt-2 w-full bg-[#111] border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
-                {suggestions.map((item) => (
-                    <Link 
-                    key={item.id} 
-                    href={`/${item.media_type === 'tv' ? 'tv' : 'movie'}/${item.id}`}
-                    onClick={() => setShowSuggestions(false)}
-                    className="flex items-center gap-4 p-3 hover:bg-white/5 transition border-b border-white/5 last:border-0 group"
-                    >
-                    <img src={item.poster_path ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : '/placeholder.jpg'} className="w-10 h-14 object-cover rounded shadow group-hover:scale-105 transition" alt="" />
-                    <div>
-                        <div className="font-bold text-sm text-gray-200 group-hover:text-cyan-400 transition">{item.title || item.name}</div>
-                        <div className="text-xs text-gray-500 uppercase tracking-widest mt-1">
-                        {item.media_type} • {item.release_date?.split('-')[0] || item.first_air_date?.split('-')[0] || 'N/A'}
+                {/* Suggestions Dropdown */}
+                {showSuggestions && suggestions.length > 0 && (
+                    <div className="absolute top-full mt-2 w-full bg-[#111] border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
+                    {suggestions.map((item) => (
+                        <Link 
+                        key={item.id} 
+                        href={`/${item.media_type === 'tv' ? 'tv' : 'movie'}/${item.id}`}
+                        onClick={() => setShowSuggestions(false)}
+                        className="flex items-center gap-4 p-3 hover:bg-white/5 transition border-b border-white/5 last:border-0 group"
+                        >
+                        <img src={item.poster_path ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : '/placeholder.jpg'} className="w-10 h-14 object-cover rounded shadow group-hover:scale-105 transition" alt="" />
+                        <div>
+                            <div className="font-bold text-sm text-gray-200 group-hover:text-cyan-400 transition">{item.title || item.name}</div>
+                            <div className="text-xs text-gray-500 uppercase tracking-widest mt-1">
+                            {item.media_type} • {item.release_date?.split('-')[0] || item.first_air_date?.split('-')[0] || 'N/A'}
+                            </div>
                         </div>
+                        </Link>
+                    ))}
                     </div>
-                    </Link>
-                ))}
-                </div>
-            )}
+                )}
             </div>
 
-            {/* 3. RIGHT: ACTIONS (Vertically Aligned) */}
-            <div className="flex items-center gap-6 shrink-0 h-10">
-            <SignedIn>
-                <Link href="/watchlist" className="text-gray-300 hover:text-white font-bold text-sm transition hidden md:flex items-center h-full">
-                    Watchlist
-                </Link>
-                <div className="flex items-center pt-1"> 
-                    <UserButton afterSignOutUrl="/" />
-                </div>
-            </SignedIn>
-            
-            <SignedOut>
-                <SignInButton mode="modal">
-                    <button className="text-gray-300 hover:text-white font-bold text-sm transition h-full flex items-center">
-                        Sign In
-                    </button>
-                </SignInButton>
-            </SignedOut>
+            {/* 3. RIGHT: ACTIONS */}
+            <div className="flex items-center gap-6 shrink-0">
+                <SignedIn>
+                    {/* Watchlist Link: Added 'flex items-center' to force vertical alignment */}
+                    <Link href="/watchlist" className="hidden md:flex items-center text-gray-300 hover:text-white font-bold text-sm transition h-10">
+                        Watchlist
+                    </Link>
+                    
+                    {/* User Button Wrapper: Ensures the circle icon is centered */}
+                    <div className="flex items-center justify-center h-10 w-10"> 
+                        <UserButton afterSignOutUrl="/" />
+                    </div>
+                </SignedIn>
+                
+                <SignedOut>
+                    <SignInButton mode="modal">
+                        <button className="flex items-center text-gray-300 hover:text-white font-bold text-sm transition h-10">
+                            Sign In
+                        </button>
+                    </SignInButton>
+                </SignedOut>
 
-            <Link href="/discover">
-                <button className="h-10 px-5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/5 transition font-bold text-xs flex items-center justify-center">
-                    Browse Library
-                </button>
-            </Link>
+                {/* Browse Button: Added 'flex items-center justify-center' */}
+                <Link href="/discover">
+                    <button className="h-10 px-5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/5 transition font-bold text-xs flex items-center justify-center">
+                        Browse Library
+                    </button>
+                </Link>
             </div>
         </div>
       </nav>
