@@ -4,6 +4,7 @@ import axios from 'axios';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PlayCircle, Info, ChevronRight, ChevronLeft, Star, Search, Loader2 } from 'lucide-react';
+import { UserButton, SignedIn, SignedOut, SignInButton } from '@clerk/nextjs'; // 👈 NEW IMPORTS
 import MovieCard from '@/components/MovieCard';
 import { API_BASE_URL } from '@/config';
 
@@ -63,7 +64,7 @@ export default function Home() {
         setSuggestions([]);
         setShowSuggestions(false);
       }
-    }, 300); // 300ms delay
+    }, 300);
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
@@ -97,7 +98,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white selection:bg-cyan-500/30 pb-20">
       
-      {/* NAVBAR WITH SEARCH */}
+      {/* NAVBAR */}
       <nav className="fixed top-0 w-full z-50 bg-black/80 backdrop-blur-md border-b border-white/5 shadow-2xl transition-all duration-300">
         <div className="max-w-[1800px] mx-auto px-6 h-16 flex items-center gap-8">
           <Link href="/"><div className="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 cursor-pointer drop-shadow-lg shrink-0">CineVault</div></Link>
@@ -117,7 +118,7 @@ export default function Home() {
               {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-cyan-500" size={16} />}
             </form>
 
-            {/* LIVE SUGGESTIONS DROPDOWN */}
+            {/* LIVE SUGGESTIONS */}
             {showSuggestions && suggestions.length > 0 && (
               <div className="absolute top-full mt-2 w-full bg-[#111] border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
                 {suggestions.map((item) => (
@@ -136,18 +137,22 @@ export default function Home() {
                     </div>
                   </Link>
                 ))}
-                <button 
-                  onClick={handleSearchSubmit}
-                  className="w-full p-3 text-center text-xs font-bold text-cyan-400 hover:bg-cyan-400/10 transition uppercase tracking-widest"
-                >
-                  See all results for "{searchQuery}"
-                </button>
               </div>
             )}
           </div>
 
           <div className="flex items-center gap-6 shrink-0">
-            <Link href="/watchlist" className="text-gray-300 hover:text-white font-bold text-xs transition hidden md:block">My List</Link>
+             {/* 👇 CLERK AUTH BUTTONS */}
+            <SignedIn>
+                <Link href="/watchlist" className="text-gray-300 hover:text-white font-bold text-xs transition hidden md:block">Watchlist</Link>
+                <UserButton afterSignOutUrl="/" />
+            </SignedIn>
+            <SignedOut>
+                <SignInButton mode="modal">
+                    <button className="text-gray-300 hover:text-white font-bold text-xs transition">Sign In</button>
+                </SignInButton>
+            </SignedOut>
+
             <Link href="/discover"><button className="px-5 py-2 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/5 transition font-bold text-xs">Browse Library</button></Link>
           </div>
         </div>

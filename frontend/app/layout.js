@@ -1,18 +1,30 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { ClerkProvider } from '@clerk/nextjs';
+import { dark } from '@clerk/themes';
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "CineVault",
-  description: "The ultimate collection of cinema.",
+  description: "The Ultimate Movie Database",
 };
 
-// 👇 THIS IS THE PART THAT WAS MISSING/BROKEN
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
-    </html>
+    <ClerkProvider
+      appearance={{
+        baseTheme: dark,
+        variables: { 
+            colorPrimary: '#22d3ee', 
+            colorBackground: '#111',
+            colorText: 'white' 
+        }
+      }}
+    >
+      <html lang="en">
+        <body className={inter.className}>{children}</body>
+      </html>
+    </ClerkProvider>
   );
 }
