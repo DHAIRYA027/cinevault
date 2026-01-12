@@ -16,6 +16,7 @@ export default function WatchlistPage() {
         const fetchWatchlist = async () => {
             if (!isLoaded || !user) return;
             try {
+                // Fetch the list using the Clerk User ID
                 const res = await axios.get(`${API_BASE_URL}/api/watchlist/${user.id}`);
                 setWatchlist(res.data);
             } catch (err) {
@@ -31,8 +32,10 @@ export default function WatchlistPage() {
         }
     }, [isLoaded, isSignedIn, user]);
 
+    // 1. Loading State (Waiting for Clerk)
     if (!isLoaded) return <div className="min-h-screen bg-black" />;
 
+    // 2. Not Signed In State
     if (!isSignedIn) {
         return (
             <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col items-center justify-center p-6 text-center">
@@ -50,6 +53,7 @@ export default function WatchlistPage() {
         );
     }
 
+    // 3. Main Watchlist View
     return (
         <main className="min-h-screen bg-[#0a0a0a] text-white p-6 pt-24">
             {/* Header */}
@@ -66,18 +70,18 @@ export default function WatchlistPage() {
                 ) : watchlist.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                         {watchlist.map((item) => (
-                            <div key={item.tmdbId} className="relative group">
+                            <div key={item.tmdbId} className="relative group animate-in fade-in duration-500">
                                 <MovieCard movie={{
                                     ...item,
-                                    id: item.tmdbId, // Ensure ID format matches MovieCard expectation
+                                    id: item.tmdbId, // IMPORTANT: MovieCard expects 'id' or 'tmdbId' depending on your implementation
+                                    tmdbId: item.tmdbId,
                                     vote_average: item.vote_average
                                 }} />
-                                {/* Remove Button (Optional: You can add a small X button here later if you want) */}
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-32 text-center opacity-0 animate-in fade-in slide-in-from-bottom-5 duration-700">
+                    <div className="flex flex-col items-center justify-center py-32 text-center opacity-0 animate-in fade-in slide-in-from-bottom-5 duration-700 forwards" style={{ opacity: 1 }}>
                         <div className="bg-white/5 p-8 rounded-full mb-6">
                             <Film size={48} className="text-gray-600" />
                         </div>
