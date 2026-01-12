@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
-import { PlayCircle, Star, Calendar, Clock, ChevronLeft, User, Image as ImageIcon, MessageSquare, Plus } from 'lucide-react';
+import { PlayCircle, Star, Calendar, Clock, ChevronLeft, User, Image as ImageIcon, MessageSquare, Plus, Globe, DollarSign, Activity } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 import { API_BASE_URL } from '@/config';
 import WatchlistButton from '@/components/WatchlistButton';
@@ -23,7 +23,6 @@ export default function MoviePage() {
     const [reviewRating, setReviewRating] = useState(10);
     const [submitting, setSubmitting] = useState(false);
 
-    // Fetch Movie Data
     const fetchMovie = async () => {
         try {
             const res = await axios.get(`${API_BASE_URL}/api/movies/${id}?type=${typeParam}`);
@@ -38,7 +37,6 @@ export default function MoviePage() {
         if (id) fetchMovie();
     }, [id, typeParam]);
 
-    // Submit Review Logic
     const handleReviewSubmit = async (e) => {
         e.preventDefault();
         if (!user) return alert("Please sign in to review!");
@@ -52,11 +50,31 @@ export default function MoviePage() {
             });
             setShowReviewForm(false);
             setReviewContent('');
-            fetchMovie(); // Refresh to see new review
+            fetchMovie(); 
         } catch (err) {
             alert("Failed to post review");
         }
         setSubmitting(false);
+    };
+
+    // Helper to format currency
+    const formatMoney = (amount) => {
+        if (!amount || amount === 0) return 'N/A';
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+    };
+
+    // Helper to format runtime
+    const formatRuntime = (mins) => {
+        if (!mins) return '';
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return `${h}h ${m}m`;
+    };
+
+    // Helper to format full date
+    const formatDate = (dateString) => {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     };
 
     if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-bold text-xl">Loading...</div>;
@@ -77,15 +95,13 @@ export default function MoviePage() {
                     <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent" />
                 </div>
 
-                {/* BACK BUTTON */}
                 <Link href="/" className="absolute top-6 left-6 z-50 bg-white/10 p-3 rounded-full hover:bg-white/20 backdrop-blur-md transition">
                     <ChevronLeft size={24} />
                 </Link>
 
-                {/* CONTENT CONTAINER */}
                 <div className="absolute bottom-0 left-0 w-full p-6 md:p-12 z-10 flex flex-col md:flex-row gap-10 items-end">
                     
-                    {/* POSTER (Desktop) */}
+                    {/* POSTER */}
                     <img 
                         src={movie.poster_path} 
                         className="hidden md:block w-64 rounded-xl shadow-2xl border border-white/10"
@@ -93,22 +109,25 @@ export default function MoviePage() {
                     />
 
                     <div className="max-w-4xl space-y-6 mb-6">
-                        {/* METADATA */}
+                        {/* METADATA ROW */}
                         <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-gray-300">
                             <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded text-xs border border-yellow-500/30 flex items-center gap-1">
                                 <Star size={12} fill="currentColor" /> {movie.vote_average?.toFixed(1)}
                             </span>
-                            <span className="flex items-center gap-1"><Calendar size={14} /> {movie.release_date?.split('-')[0]}</span>
-                            {movie.runtime && <span className="flex items-center gap-1"><Clock size={14} /> {movie.runtime}m</span>}
-                            {movie.genres?.map(g => (
-                                <span key={g} className="bg-white/10 px-3 py-1 rounded-full text-xs">{g}</span>
+                            <span className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full"><Calendar size={14} /> {movie.release_date?.split('-')[0]}</span>
+                            {movie.runtime && <span className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full"><Clock size={14} /> {formatRuntime(movie.runtime)}</span>}
+                            {movie.genres?.slice(0,3).map(g => (
+                                <span key={g} className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full text-xs">{g}</span>
                             ))}
                         </div>
 
-                        {/* TITLE */}
-                        <h1 className="text-4xl md:text-6xl font-black leading-tight tracking-tight drop-shadow-2xl">
-                            {movie.title || movie.name}
-                        </h1>
+                        {/* TITLE & TAGLINE */}
+                        <div>
+                            <h1 className="text-4xl md:text-6xl font-black leading-tight tracking-tight drop-shadow-2xl">
+                                {movie.title || movie.name}
+                            </h1>
+                            {movie.tagline && <p className="text-xl text-cyan-400/80 italic mt-2 font-medium">"{movie.tagline}"</p>}
+                        </div>
 
                         {/* OVERVIEW */}
                         <p className="text-lg text-gray-300 leading-relaxed max-w-2xl line-clamp-4 md:line-clamp-none">
@@ -122,8 +141,6 @@ export default function MoviePage() {
                                     <PlayCircle size={24} fill="black" /> Watch Now
                                 </button>
                             </Link>
-
-                            {/* 👇 THE WATCHLIST BUTTON */}
                             <WatchlistButton movie={movie} />
                         </div>
                     </div>
@@ -133,10 +150,8 @@ export default function MoviePage() {
             {/* MAIN CONTENT GRID */}
             <div className="max-w-[1800px] mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-3 gap-12">
                 
-                {/* LEFT COLUMN (Cast, Photos, Reviews) */}
+                {/* LEFT COLUMN */}
                 <div className="lg:col-span-2 space-y-12">
-                    
-                    {/* 2. TOP CAST */}
                     <section>
                         <h3 className="text-2xl font-bold flex items-center gap-2 mb-6"><User className="text-cyan-400" /> Top Cast</h3>
                         <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
@@ -154,7 +169,6 @@ export default function MoviePage() {
                         </div>
                     </section>
 
-                    {/* 3. PHOTOS (Restored!) */}
                     {movie.screenshots && movie.screenshots.length > 0 && (
                         <section>
                             <h3 className="text-2xl font-bold flex items-center gap-2 mb-6"><ImageIcon className="text-purple-400" /> Photos</h3>
@@ -166,7 +180,6 @@ export default function MoviePage() {
                         </section>
                     )}
 
-                    {/* 4. REVIEWS (Restored!) */}
                     <section>
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-2xl font-bold flex items-center gap-2"><MessageSquare className="text-green-400" /> User Reviews</h3>
@@ -177,8 +190,6 @@ export default function MoviePage() {
                                 <Plus size={16} /> Write Review
                             </button>
                         </div>
-
-                        {/* Add Review Form */}
                         {showReviewForm && (
                             <form onSubmit={handleReviewSubmit} className="bg-white/5 p-6 rounded-2xl mb-8 border border-white/10 animate-in fade-in slide-in-from-top-2">
                                 <textarea 
@@ -205,8 +216,6 @@ export default function MoviePage() {
                                 </div>
                             </form>
                         )}
-
-                        {/* Reviews List */}
                         <div className="space-y-4">
                             {movie.userReviews?.length > 0 ? (
                                 movie.userReviews.map((review, i) => (
@@ -228,9 +237,8 @@ export default function MoviePage() {
                     </section>
                 </div>
 
-                {/* RIGHT COLUMN (Trailer, Info, Recommendations) */}
+                {/* RIGHT COLUMN */}
                 <div className="space-y-8">
-                    {/* Trailer */}
                     {movie.trailerKey && (
                         <div className="rounded-2xl overflow-hidden border border-white/10 bg-black shadow-2xl">
                             <iframe 
@@ -242,17 +250,45 @@ export default function MoviePage() {
                         </div>
                     )}
                     
-                    {/* Info Card */}
-                    <div className="bg-white/5 p-6 rounded-2xl border border-white/5 space-y-4">
-                        <h4 className="font-bold text-gray-400 uppercase text-xs tracking-widest">Movie Info</h4>
-                        <div className="space-y-3 text-sm">
-                            <div className="flex justify-between border-b border-white/5 pb-2"><span className="text-gray-500">Director</span> <span>{movie.directors?.join(', ') || 'Unknown'}</span></div>
-                            <div className="flex justify-between border-b border-white/5 pb-2"><span className="text-gray-500">Writers</span> <span>{movie.writers?.join(', ') || 'Unknown'}</span></div>
-                            <div className="flex justify-between"><span className="text-gray-500">Status</span> <span>{movie.status || 'Released'}</span></div>
+                    {/* INFO CARD - IMPROVED */}
+                    <div className="bg-white/5 p-6 rounded-2xl border border-white/5 space-y-6">
+                        <h4 className="font-bold text-gray-400 uppercase text-xs tracking-widest border-b border-white/5 pb-2">Movie Info</h4>
+                        
+                        <div className="space-y-4 text-sm">
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500 flex items-center gap-2"><Calendar size={14} /> Release Date</span> 
+                                <span className="font-medium text-right">{formatDate(movie.release_date)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500 flex items-center gap-2"><Globe size={14} /> Language</span> 
+                                <span className="font-medium uppercase">{movie.original_language || 'EN'}</span>
+                            </div>
+                            {movie.budget > 0 && (
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-500 flex items-center gap-2"><DollarSign size={14} /> Budget</span> 
+                                    <span className="font-medium text-green-400">{formatMoney(movie.budget)}</span>
+                                </div>
+                            )}
+                             {movie.revenue > 0 && (
+                                <div className="flex justify-between items-center">
+                                    <span className="text-gray-500 flex items-center gap-2"><Activity size={14} /> Revenue</span> 
+                                    <span className="font-medium text-green-400">{formatMoney(movie.revenue)}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-500">Status</span> 
+                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${movie.status === 'Released' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                    {movie.status || 'Released'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-white/5 space-y-3">
+                            <div><span className="block text-gray-500 text-xs mb-1">Director</span> <span className="font-medium">{movie.directors?.join(', ') || 'Unknown'}</span></div>
+                            <div><span className="block text-gray-500 text-xs mb-1">Writers</span> <span className="font-medium">{movie.writers?.join(', ') || 'Unknown'}</span></div>
                         </div>
                     </div>
 
-                    {/* Recommendations */}
                     {movie.recommendations && movie.recommendations.length > 0 && (
                         <div>
                             <h3 className="font-bold text-gray-400 uppercase text-xs tracking-widest mb-4">You might also like</h3>

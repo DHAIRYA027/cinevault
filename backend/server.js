@@ -4,7 +4,7 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 
-// 👇 1. Import the Watchlist Model
+// Models
 const Watchlist = require('./models/Watchlist'); 
 const Movie = require('./models/Movie');
 
@@ -17,7 +17,7 @@ const API_KEY = process.env.TMDB_API_KEY;
 app.use(cors());
 app.use(express.json());
 
-// Helper: Retry logic for TMDB API
+// Helper: Retry logic for TMDB API stability
 const fetchWithRetry = async (url, params = {}, retries = 3) => {
   try {
     return await axios.get(url, { params });
@@ -36,13 +36,15 @@ mongoose.connect(process.env.MONGO_URI).then(async () => {
   app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 });
 
-// --- EXISTING ROUTES ---
+// --- ROUTES ---
 
+// 1. Get All Movies (Home Page)
 app.get('/api/movies', async (req, res) => {
   const movies = await Movie.find({}); 
   res.json(movies);
 });
 
+// 2. Search
 app.get('/api/search', async (req, res) => {
     try {
         const { q } = req.query;
@@ -57,6 +59,7 @@ app.get('/api/search', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Search failed" }); }
 });
 
+// 3. Get Movie Details (UPDATED WITH MORE DATA)
 app.get('/api/movies/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -81,17 +84,25 @@ app.get('/api/movies/:id', async (req, res) => {
     const writers = liveItem.credits?.crew?.filter(c => ['Screenplay', 'Writer', 'Story', 'Creator'].includes(c.job)).map(c => c.name).slice(0, 3) || [];
     const trailer = liveItem.videos?.results?.find(v => v.type === "Trailer" && v.site === "YouTube") || liveItem.videos?.results?.[0];
 
+    // 👇 NEW: Capturing extensive details
     const updateData = {
         tmdbId: liveItem.id,
         title: liveItem.title || liveItem.name,
         overview: liveItem.overview,
+        tagline: liveItem.tagline, // ✨ NEW
         poster_path: liveItem.poster_path ? `https://image.tmdb.org/t/p/w500${liveItem.poster_path}` : null,
         backdrop_path: liveItem.backdrop_path ? `https://image.tmdb.org/t/p/original${liveItem.backdrop_path}` : null,
         release_date: liveItem.release_date || liveItem.first_air_date,
         vote_average: liveItem.vote_average,
+        vote_count: liveItem.vote_count, // ✨ NEW
+        status: liveItem.status,         // ✨ NEW
+        runtime: liveItem.runtime || liveItem.episode_run_time?.[0], // ✨ NEW
+        budget: liveItem.budget,         // ✨ NEW
+        revenue: liveItem.revenue,       // ✨ NEW
+        original_language: liveItem.original_language, // ✨ NEW
         type: type,
         seasons: liveItem.seasons,
-        genres: liveItem.genres?.map(g => g.id) || []
+        genres: liveItem.genres?.map(g => g.name) || [] // ✨ Names instead of IDs
     };
 
     movieData = await Movie.findOneAndUpdate(
@@ -117,6 +128,7 @@ app.get('/api/movies/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: "Sync failed" }); }
 });
 
+// 4. Submit Review
 app.post('/api/reviews/:tmdbId', async (req, res) => {
     try {
         const { tmdbId } = req.params;
@@ -129,6 +141,7 @@ app.post('/api/reviews/:tmdbId', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Failed to post review" }); }
 });
 
+// 5. Get Trailer
 app.get('/api/trailer/:tmdbId', async (req, res) => {
     try {
       const { tmdbId } = req.params;
@@ -139,6 +152,7 @@ app.get('/api/trailer/:tmdbId', async (req, res) => {
     } catch (err) { res.status(404).json({ error: "Trailer unavailable" }); }
 });
 
+// 6. Get Person/Actor
 app.get('/api/person/:id', async (req, res) => {
     try {
       const response = await fetchWithRetry(`https://api.themoviedb.org/3/person/${req.params.id}?append_to_response=combined_credits,external_ids`, { api_key: API_KEY });
@@ -147,6 +161,7 @@ app.get('/api/person/:id', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Failed to fetch person" }); }
 });
 
+// 7. Get TV Season
 app.get('/api/tv/:id/season/:seasonNumber', async (req, res) => {
     try {
       const response = await fetchWithRetry(`https://api.themoviedb.org/3/tv/${req.params.id}/season/${req.params.seasonNumber}`, { api_key: API_KEY });
@@ -154,6 +169,7 @@ app.get('/api/tv/:id/season/:seasonNumber', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Failed to fetch season" }); }
 });
 
+// 8. Get TV Episode
 app.get('/api/tv/:id/season/:seasonNumber/episode/:episodeNumber', async (req, res) => {
     try {
       const { id, seasonNumber, episodeNumber } = req.params;
@@ -166,50 +182,36 @@ app.get('/api/tv/:id/season/:seasonNumber/episode/:episodeNumber', async (req, r
     } catch (err) { res.status(500).json({ error: "Failed to fetch episode" }); }
 });
 
-// 👇 2. NEW: WATCHLIST ROUTES
+// --- WATCHLIST ROUTES ---
 
-// Add to Watchlist (With Logs)
+// Add to Watchlist
 app.post('/api/watchlist', async (req, res) => {
   try {
-    console.log("📥 Add Watchlist Request Received:", req.body); // 👈 LOG THE INPUT
-
     const { userId, movie } = req.body;
+    if (!userId || !movie || !movie.tmdbId) return res.status(400).json({ error: "Invalid data" });
     
-    if (!userId || !movie || !movie.tmdbId) {
-        console.log("❌ Missing Data:", { userId, movie });
-        return res.status(400).json({ error: "Invalid data" });
-    }
-
-    const savedItem = await Watchlist.findOneAndUpdate(
+    await Watchlist.findOneAndUpdate(
       { userId, tmdbId: movie.tmdbId }, 
       { ...movie, userId },             
       { upsert: true, new: true }       
     );
-    
-    console.log("✅ Successfully Saved to DB:", savedItem); // 👈 LOG THE SUCCESS
     res.json({ success: true });
-  } catch (err) { 
-    console.error("🔥 Save Error:", err);
-    res.status(500).json({ error: "Failed to add" }); 
-  }
+  } catch (err) { res.status(500).json({ error: "Failed to add" }); }
 });
 
 // Remove from Watchlist
 app.delete('/api/watchlist/:userId/:tmdbId', async (req, res) => {
   try {
     const { userId, tmdbId } = req.params;
-    console.log(`🗑️ Removing: User ${userId}, Movie ${tmdbId}`);
     await Watchlist.findOneAndDelete({ userId, tmdbId });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: "Failed to remove" }); }
 });
 
-// Get User's Watchlist (With Logs)
+// Get User's Watchlist
 app.get('/api/watchlist/:userId', async (req, res) => {
   try {
-    console.log(`🔍 Fetching List for User: ${req.params.userId}`);
     const list = await Watchlist.find({ userId: req.params.userId }).sort({ addedAt: -1 });
-    console.log(`📄 Found ${list.length} items`);
     res.json(list);
   } catch (err) { res.status(500).json({ error: "Failed to fetch list" }); }
 });
