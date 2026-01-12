@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
-import { PlayCircle, Star, Calendar, Clock, ChevronLeft, User, Image as ImageIcon, MessageSquare, Plus, Globe, DollarSign, Activity } from 'lucide-react';
+import { PlayCircle, Star, Calendar, Clock, ChevronLeft, User, Image as ImageIcon, MessageSquare, Plus, Globe, DollarSign, Activity, ExternalLink } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 import { API_BASE_URL } from '@/config';
 import WatchlistButton from '@/components/WatchlistButton';
@@ -57,13 +57,11 @@ export default function MoviePage() {
         setSubmitting(false);
     };
 
-    // Helper to format currency
     const formatMoney = (amount) => {
         if (!amount || amount === 0) return 'N/A';
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
     };
 
-    // Helper to format runtime
     const formatRuntime = (mins) => {
         if (!mins) return '';
         const h = Math.floor(mins / 60);
@@ -71,11 +69,24 @@ export default function MoviePage() {
         return `${h}h ${m}m`;
     };
 
-    // Helper to format full date
     const formatDate = (dateString) => {
         if (!dateString) return 'N/A';
         return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     };
+
+    // 👇 LOGIC TO FIND STREAMING LINK
+    const getWatchLink = () => {
+        if (!movie || !movie.providers) return null;
+        // 1. Try India (IN) first
+        if (movie.providers.IN && movie.providers.IN.link) return movie.providers.IN.link;
+        // 2. Fallback to US
+        if (movie.providers.US && movie.providers.US.link) return movie.providers.US.link;
+        // 3. Fallback to Homepage if available
+        if (movie.homepage) return movie.homepage;
+        return null;
+    };
+
+    const watchLink = getWatchLink();
 
     if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-bold text-xl">Loading...</div>;
     if (!movie) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-bold text-xl">Movie not found</div>;
@@ -83,7 +94,7 @@ export default function MoviePage() {
     return (
         <main className="min-h-screen bg-[#0a0a0a] text-white pb-20">
             
-            {/* 1. BACKDROP HEADER */}
+            {/* BACKDROP HEADER */}
             <div className="relative w-full h-[70vh] md:h-[85vh]">
                 <div className="absolute inset-0">
                     <img 
@@ -109,19 +120,23 @@ export default function MoviePage() {
                     />
 
                     <div className="max-w-4xl space-y-6 mb-6">
-                        {/* METADATA ROW */}
+                        {/* METADATA */}
                         <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-gray-300">
                             <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded text-xs border border-yellow-500/30 flex items-center gap-1">
                                 <Star size={12} fill="currentColor" /> {movie.vote_average?.toFixed(1)}
                             </span>
                             <span className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full"><Calendar size={14} /> {movie.release_date?.split('-')[0]}</span>
                             {movie.runtime && <span className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full"><Clock size={14} /> {formatRuntime(movie.runtime)}</span>}
+                            
+                            {/* FIX FOR RANDOM NUMBERS: Check if genre is a string (new backend) or number (old data) */}
                             {movie.genres?.slice(0,3).map(g => (
-                                <span key={g} className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full text-xs">{g}</span>
+                                <span key={g} className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full text-xs">
+                                    {typeof g === 'string' ? g : 'Update Backend'}
+                                </span>
                             ))}
                         </div>
 
-                        {/* TITLE & TAGLINE */}
+                        {/* TITLE */}
                         <div>
                             <h1 className="text-4xl md:text-6xl font-black leading-tight tracking-tight drop-shadow-2xl">
                                 {movie.title || movie.name}
@@ -136,21 +151,28 @@ export default function MoviePage() {
 
                         {/* ACTION BUTTONS */}
                         <div className="flex flex-wrap items-center gap-4 pt-4">
-                            <Link href={`/player/${id}?type=${movie.type || 'movie'}`}>
-                                <button className="bg-white text-black px-8 py-3 rounded-full font-bold text-lg flex items-center gap-2 hover:scale-105 transition shadow-[0_0_20px_rgba(255,255,255,0.3)]">
-                                    <PlayCircle size={24} fill="black" /> Watch Now
+                            
+                            {/* 👇 NEW WATCH BUTTON LOGIC */}
+                            {watchLink ? (
+                                <a href={watchLink} target="_blank" rel="noopener noreferrer">
+                                    <button className="bg-white text-black px-8 py-3 rounded-full font-bold text-lg flex items-center gap-2 hover:scale-105 transition shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+                                        <PlayCircle size={24} fill="black" /> Stream Now
+                                    </button>
+                                </a>
+                            ) : (
+                                <button disabled className="bg-white/20 text-gray-400 px-8 py-3 rounded-full font-bold text-lg flex items-center gap-2 cursor-not-allowed">
+                                    <PlayCircle size={24} /> Unavailable
                                 </button>
-                            </Link>
+                            )}
+
                             <WatchlistButton movie={movie} />
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* MAIN CONTENT GRID */}
+            {/* REST OF PAGE (Cast, Photos, Reviews, Info) */}
             <div className="max-w-[1800px] mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-3 gap-12">
-                
-                {/* LEFT COLUMN */}
                 <div className="lg:col-span-2 space-y-12">
                     <section>
                         <h3 className="text-2xl font-bold flex items-center gap-2 mb-6"><User className="text-cyan-400" /> Top Cast</h3>
@@ -168,7 +190,8 @@ export default function MoviePage() {
                             ))}
                         </div>
                     </section>
-
+                    
+                    {/* Photos */}
                     {movie.screenshots && movie.screenshots.length > 0 && (
                         <section>
                             <h3 className="text-2xl font-bold flex items-center gap-2 mb-6"><ImageIcon className="text-purple-400" /> Photos</h3>
@@ -180,39 +203,18 @@ export default function MoviePage() {
                         </section>
                     )}
 
+                    {/* Reviews */}
                     <section>
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-2xl font-bold flex items-center gap-2"><MessageSquare className="text-green-400" /> User Reviews</h3>
-                            <button 
-                                onClick={() => setShowReviewForm(!showReviewForm)}
-                                className="text-sm font-bold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full transition flex items-center gap-2"
-                            >
-                                <Plus size={16} /> Write Review
-                            </button>
+                            <button onClick={() => setShowReviewForm(!showReviewForm)} className="text-sm font-bold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full transition flex items-center gap-2"><Plus size={16} /> Write Review</button>
                         </div>
                         {showReviewForm && (
                             <form onSubmit={handleReviewSubmit} className="bg-white/5 p-6 rounded-2xl mb-8 border border-white/10 animate-in fade-in slide-in-from-top-2">
-                                <textarea 
-                                    className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-cyan-500 outline-none min-h-[100px]"
-                                    placeholder="Write your thoughts..."
-                                    value={reviewContent}
-                                    onChange={e => setReviewContent(e.target.value)}
-                                    required
-                                />
+                                <textarea className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-cyan-500 outline-none min-h-[100px]" placeholder="Write your thoughts..." value={reviewContent} onChange={e => setReviewContent(e.target.value)} required />
                                 <div className="flex items-center justify-between mt-4">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-gray-400">Rating:</span>
-                                        <input 
-                                            type="number" min="1" max="10" 
-                                            value={reviewRating} 
-                                            onChange={e => setReviewRating(e.target.value)}
-                                            className="bg-black/50 border border-white/10 rounded-lg w-16 px-2 py-1 text-center"
-                                        />
-                                        <Star size={16} className="text-yellow-400" fill="currentColor" />
-                                    </div>
-                                    <button disabled={submitting} className="bg-cyan-500 text-black font-bold px-6 py-2 rounded-full hover:bg-cyan-400 transition">
-                                        {submitting ? 'Posting...' : 'Post Review'}
-                                    </button>
+                                    <div className="flex items-center gap-2"><span className="text-sm text-gray-400">Rating:</span><input type="number" min="1" max="10" value={reviewRating} onChange={e => setReviewRating(e.target.value)} className="bg-black/50 border border-white/10 rounded-lg w-16 px-2 py-1 text-center"/><Star size={16} className="text-yellow-400" fill="currentColor" /></div>
+                                    <button disabled={submitting} className="bg-cyan-500 text-black font-bold px-6 py-2 rounded-full hover:bg-cyan-400 transition">{submitting ? 'Posting...' : 'Post Review'}</button>
                                 </div>
                             </form>
                         )}
@@ -220,69 +222,32 @@ export default function MoviePage() {
                             {movie.userReviews?.length > 0 ? (
                                 movie.userReviews.map((review, i) => (
                                     <div key={i} className="bg-white/5 p-6 rounded-xl border border-white/5">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-cyan-400">{review.author}</span>
-                                            <span className="text-xs text-gray-500">{new Date(review.date).toLocaleDateString()}</span>
-                                        </div>
-                                        <div className="flex items-center gap-1 text-yellow-400 text-xs mb-3">
-                                            <Star size={12} fill="currentColor" /> {review.rating}/10
-                                        </div>
+                                        <div className="flex items-center justify-between mb-2"><span className="font-bold text-cyan-400">{review.author}</span><span className="text-xs text-gray-500">{new Date(review.date).toLocaleDateString()}</span></div>
+                                        <div className="flex items-center gap-1 text-yellow-400 text-xs mb-3"><Star size={12} fill="currentColor" /> {review.rating}/10</div>
                                         <p className="text-gray-300 text-sm leading-relaxed">{review.content}</p>
                                     </div>
                                 ))
-                            ) : (
-                                <p className="text-gray-500 italic">No reviews yet. Be the first to review!</p>
-                            )}
+                            ) : (<p className="text-gray-500 italic">No reviews yet. Be the first to review!</p>)}
                         </div>
                     </section>
                 </div>
 
-                {/* RIGHT COLUMN */}
                 <div className="space-y-8">
                     {movie.trailerKey && (
                         <div className="rounded-2xl overflow-hidden border border-white/10 bg-black shadow-2xl">
-                            <iframe 
-                                className="w-full aspect-video" 
-                                src={`https://www.youtube.com/embed/${movie.trailerKey}`} 
-                                title="Trailer" 
-                                allowFullScreen
-                            ></iframe>
+                            <iframe className="w-full aspect-video" src={`https://www.youtube.com/embed/${movie.trailerKey}`} title="Trailer" allowFullScreen></iframe>
                         </div>
                     )}
                     
-                    {/* INFO CARD - IMPROVED */}
                     <div className="bg-white/5 p-6 rounded-2xl border border-white/5 space-y-6">
                         <h4 className="font-bold text-gray-400 uppercase text-xs tracking-widest border-b border-white/5 pb-2">Movie Info</h4>
-                        
                         <div className="space-y-4 text-sm">
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-500 flex items-center gap-2"><Calendar size={14} /> Release Date</span> 
-                                <span className="font-medium text-right">{formatDate(movie.release_date)}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-500 flex items-center gap-2"><Globe size={14} /> Language</span> 
-                                <span className="font-medium uppercase">{movie.original_language || 'EN'}</span>
-                            </div>
-                            {movie.budget > 0 && (
-                                <div className="flex justify-between items-center">
-                                    <span className="text-gray-500 flex items-center gap-2"><DollarSign size={14} /> Budget</span> 
-                                    <span className="font-medium text-green-400">{formatMoney(movie.budget)}</span>
-                                </div>
-                            )}
-                             {movie.revenue > 0 && (
-                                <div className="flex justify-between items-center">
-                                    <span className="text-gray-500 flex items-center gap-2"><Activity size={14} /> Revenue</span> 
-                                    <span className="font-medium text-green-400">{formatMoney(movie.revenue)}</span>
-                                </div>
-                            )}
-                            <div className="flex justify-between items-center">
-                                <span className="text-gray-500">Status</span> 
-                                <span className={`px-2 py-0.5 rounded text-xs font-bold ${movie.status === 'Released' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                    {movie.status || 'Released'}
-                                </span>
-                            </div>
+                            <div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><Calendar size={14} /> Release Date</span> <span className="font-medium text-right">{formatDate(movie.release_date)}</span></div>
+                            <div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><Globe size={14} /> Language</span> <span className="font-medium uppercase">{movie.original_language || 'EN'}</span></div>
+                            {movie.budget > 0 && (<div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><DollarSign size={14} /> Budget</span> <span className="font-medium text-green-400">{formatMoney(movie.budget)}</span></div>)}
+                             {movie.revenue > 0 && (<div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><Activity size={14} /> Revenue</span> <span className="font-medium text-green-400">{formatMoney(movie.revenue)}</span></div>)}
+                            <div className="flex justify-between items-center"><span className="text-gray-500">Status</span> <span className={`px-2 py-0.5 rounded text-xs font-bold ${movie.status === 'Released' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{movie.status || 'Released'}</span></div>
                         </div>
-
                         <div className="pt-4 border-t border-white/5 space-y-3">
                             <div><span className="block text-gray-500 text-xs mb-1">Director</span> <span className="font-medium">{movie.directors?.join(', ') || 'Unknown'}</span></div>
                             <div><span className="block text-gray-500 text-xs mb-1">Writers</span> <span className="font-medium">{movie.writers?.join(', ') || 'Unknown'}</span></div>
