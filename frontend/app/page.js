@@ -23,18 +23,37 @@ export default function Home() {
 
   const shuffle = (array) => [...array].sort(() => 0.5 - Math.random());
 
-  // 1. Fetch Home Data
+  // 1. Fetch Home Data with LocalStorage Caching
   useEffect(() => {
     const fetchData = async () => {
+      // ⚡️ INSTANT LOAD: Check LocalStorage first
+      const cachedData = localStorage.getItem('home_movies_cache');
+      if (cachedData) {
+        const parsed = JSON.parse(cachedData);
+        setMovies(parsed);
+        const candidates = parsed.filter(m => m.backdrop_path && m.vote_average > 7);
+        setHeroMovies(shuffle(candidates).slice(0, 10));
+        setLoading(false); // Stop spinner immediately
+      }
+
       try {
+        // Fetch Fresh Data in Background
         const response = await axios.get(`${API_BASE_URL}/api/movies?t=${new Date().getTime()}`);
         const allMovies = response.data;
-        setMovies(shuffle(allMovies));
         
+        // Update State & Cache
+        setMovies(shuffle(allMovies));
+        localStorage.setItem('home_movies_cache', JSON.stringify(allMovies));
+        
+        // Update Hero if we didn't have cache, or just refresh it silently
         const candidates = allMovies.filter(m => m.backdrop_path && m.vote_average > 7);
-        setHeroMovies(shuffle(candidates).slice(0, 10));
+        if (!cachedData) setHeroMovies(shuffle(candidates).slice(0, 10));
+        
         setLoading(false);
-      } catch (error) { setLoading(false); }
+      } catch (error) { 
+        console.error("Background fetch failed", error);
+        setLoading(false); 
+      }
     };
     fetchData();
   }, []);
@@ -102,7 +121,7 @@ export default function Home() {
       <nav className="fixed top-0 w-full z-50 bg-black/80 backdrop-blur-md border-b border-white/5 shadow-2xl transition-all duration-300">
         <div className="max-w-[1800px] mx-auto px-6 h-16 flex items-center justify-between gap-4">
             
-            {/* 1. LEFT: LOGO (Flex container to ensure vertical center) */}
+            {/* 1. LEFT: LOGO */}
             <Link href="/" className="shrink-0 flex items-center">
                 <div className="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 cursor-pointer drop-shadow-lg">
                     CineVault
@@ -150,12 +169,9 @@ export default function Home() {
             {/* 3. RIGHT: ACTIONS */}
             <div className="flex items-center gap-6 shrink-0">
                 <SignedIn>
-                    {/* Watchlist Link: Added 'flex items-center' to force vertical alignment */}
                     <Link href="/watchlist" className="hidden md:flex items-center text-gray-300 hover:text-white font-bold text-sm transition h-10">
                         Watchlist
                     </Link>
-                    
-                    {/* User Button Wrapper: Ensures the circle icon is centered */}
                     <div className="flex items-center justify-center h-10 w-10"> 
                         <UserButton afterSignOutUrl="/" />
                     </div>
@@ -169,7 +185,6 @@ export default function Home() {
                     </SignInButton>
                 </SignedOut>
 
-                {/* Browse Button: Added 'flex items-center justify-center' */}
                 <Link href="/discover">
                     <button className="h-10 px-5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/5 transition font-bold text-xs flex items-center justify-center">
                         Browse Library
