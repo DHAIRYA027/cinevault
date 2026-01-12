@@ -4,6 +4,10 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 
+// 👇 1. Import the Watchlist Model
+const Watchlist = require('./models/Watchlist'); 
+const Movie = require('./models/Movie');
+
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 const app = express();
@@ -13,8 +17,7 @@ const API_KEY = process.env.TMDB_API_KEY;
 app.use(cors());
 app.use(express.json());
 
-const Movie = require('./models/Movie');
-
+// Helper: Retry logic for TMDB API
 const fetchWithRetry = async (url, params = {}, retries = 3) => {
   try {
     return await axios.get(url, { params });
@@ -33,34 +36,25 @@ mongoose.connect(process.env.MONGO_URI).then(async () => {
   app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
 });
 
-// --- ROUTES ---
+// --- EXISTING ROUTES ---
 
 app.get('/api/movies', async (req, res) => {
   const movies = await Movie.find({}); 
   res.json(movies);
 });
 
-// 👇 NEW: Search Route (Handles Movies & TV)
 app.get('/api/search', async (req, res) => {
     try {
         const { q } = req.query;
         if (!q) return res.json([]);
-
         const response = await fetchWithRetry(`https://api.themoviedb.org/3/search/multi`, { 
-            api_key: API_KEY,
-            query: q,
-            include_adult: false
+            api_key: API_KEY, query: q, include_adult: false
         });
-        
-        // Filter: Only Movies/TV with Posters
         const filtered = response.data.results
             .filter(item => (item.media_type === 'movie' || item.media_type === 'tv') && item.poster_path)
-            .slice(0, 10); // Limit results
-        
+            .slice(0, 10);
         res.json(filtered);
-    } catch (err) {
-        res.status(500).json({ error: "Search failed" });
-    }
+    } catch (err) { res.status(500).json({ error: "Search failed" }); }
 });
 
 app.get('/api/movies/:id', async (req, res) => {
@@ -68,13 +62,11 @@ app.get('/api/movies/:id', async (req, res) => {
   try {
     let movieData = null;
     if (mongoose.Types.ObjectId.isValid(id)) movieData = await Movie.findById(id);
-    
     if (!movieData) {
         const query = { tmdbId: id };
         if (req.query.type) query.type = req.query.type;
         movieData = await Movie.findOne(query);
     }
-
     const type = req.query.type || (movieData ? movieData.type : 'movie');
     const endpointType = (type === 'anime' || type === 'tv') ? 'tv' : 'movie';
     const lookupId = movieData?.tmdbId || id;
@@ -85,7 +77,6 @@ app.get('/api/movies/:id', async (req, res) => {
     });
     
     const liveItem = tmdbRes.data;
-
     const directors = liveItem.credits?.crew?.filter(c => c.job === 'Director').map(c => c.name) || [];
     const writers = liveItem.credits?.crew?.filter(c => ['Screenplay', 'Writer', 'Story', 'Creator'].includes(c.job)).map(c => c.name).slice(0, 3) || [];
     const trailer = liveItem.videos?.results?.find(v => v.type === "Trailer" && v.site === "YouTube") || liveItem.videos?.results?.[0];
@@ -114,9 +105,7 @@ app.get('/api/movies/:id', async (req, res) => {
       _id: movieData._id,
       userReviews: movieData.userReviews || [],
       cast: liveItem.credits?.cast?.slice(0, 10) || [],
-      directors, 
-      writers,   
-      trailerKey: trailer?.key, 
+      directors, writers, trailerKey: trailer?.key, 
       recommendations: liveItem.recommendations?.results?.slice(0, 10).map(r => ({
         tmdbId: r.id, title: r.title || r.name, poster_path: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null, vote_average: r.vote_average, type: type
       })).filter(i => i.poster_path),
@@ -124,13 +113,8 @@ app.get('/api/movies/:id', async (req, res) => {
       reviews: liveItem.reviews?.results?.slice(0, 5),
       providers: liveItem['watch/providers']?.results || {}
     };
-
     res.json(formattedData);
-
-  } catch (err) {
-    console.error("Backend Error:", err.message);
-    res.status(500).json({ error: "Sync failed" });
-  }
+  } catch (err) { res.status(500).json({ error: "Sync failed" }); }
 });
 
 app.post('/api/reviews/:tmdbId', async (req, res) => {
@@ -138,13 +122,10 @@ app.post('/api/reviews/:tmdbId', async (req, res) => {
         const { tmdbId } = req.params;
         const { author, rating, content, type } = req.body;
         const review = { author: author || 'Anonymous', rating: Number(rating), content, date: new Date() };
-
         let updatedMovie = await Movie.findOneAndUpdate({ tmdbId: Number(tmdbId), type: type }, { $push: { userReviews: review } }, { new: true });
         if (!updatedMovie) updatedMovie = await Movie.findOneAndUpdate({ tmdbId: Number(tmdbId) }, { $push: { userReviews: review } }, { new: true });
-
         if (updatedMovie) res.json(updatedMovie.userReviews);
         else res.status(404).json({ error: "Movie record not found" });
-
     } catch (err) { res.status(500).json({ error: "Failed to post review" }); }
 });
 
@@ -177,14 +158,51 @@ app.get('/api/tv/:id/season/:seasonNumber/episode/:episodeNumber', async (req, r
     try {
       const { id, seasonNumber, episodeNumber } = req.params;
       const episodeRes = await fetchWithRetry(`https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}/episode/${episodeNumber}`, { 
-          api_key: API_KEY,
-          append_to_response: 'images,credits,videos,external_ids'
+          api_key: API_KEY, append_to_response: 'images,credits,videos,external_ids'
       });
       const providerRes = await fetchWithRetry(`https://api.themoviedb.org/3/tv/${id}/watch/providers`, { api_key: API_KEY });
       const data = { ...episodeRes.data, providers: providerRes.data.results || {} };
       res.json(data);
-    } catch (err) { 
-        console.error("Backend Error:", err.message);
-        res.status(500).json({ error: "Failed to fetch episode" }); 
-    }
+    } catch (err) { res.status(500).json({ error: "Failed to fetch episode" }); }
+});
+
+// 👇 2. NEW: WATCHLIST ROUTES
+
+// Add to Watchlist
+app.post('/api/watchlist', async (req, res) => {
+  try {
+    const { userId, movie } = req.body;
+    await Watchlist.findOneAndUpdate(
+      { userId, tmdbId: movie.tmdbId }, 
+      { ...movie, userId },             
+      { upsert: true, new: true }       
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: "Failed to add" }); }
+});
+
+// Remove from Watchlist
+app.delete('/api/watchlist/:userId/:tmdbId', async (req, res) => {
+  try {
+    const { userId, tmdbId } = req.params;
+    await Watchlist.findOneAndDelete({ userId, tmdbId });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: "Failed to remove" }); }
+});
+
+// Get User's Watchlist
+app.get('/api/watchlist/:userId', async (req, res) => {
+  try {
+    const list = await Watchlist.find({ userId: req.params.userId }).sort({ addedAt: -1 });
+    res.json(list);
+  } catch (err) { res.status(500).json({ error: "Failed to fetch list" }); }
+});
+
+// Check if Saved
+app.get('/api/watchlist/:userId/:tmdbId', async (req, res) => {
+  try {
+    const { userId, tmdbId } = req.params;
+    const exists = await Watchlist.exists({ userId, tmdbId });
+    res.json({ saved: !!exists });
+  } catch (err) { res.json({ saved: false }); }
 });
