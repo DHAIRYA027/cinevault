@@ -2,7 +2,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import Link from 'next/link';
-import { PlayCircle, Info, ChevronRight, ChevronLeft, Star } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { PlayCircle, Info, ChevronRight, ChevronLeft, Star, Search, Loader2 } from 'lucide-react';
 import MovieCard from '@/components/MovieCard';
 import { API_BASE_URL } from '@/config';
 
@@ -12,8 +13,16 @@ export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // Search States
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+
   const shuffle = (array) => [...array].sort(() => 0.5 - Math.random());
 
+  // 1. Fetch Home Data
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -29,6 +38,7 @@ export default function Home() {
     fetchData();
   }, []);
 
+  // 2. Hero Auto-Slide
   const nextSlide = useCallback(() => setCurrentIndex((prev) => (prev + 1) % heroMovies.length), [heroMovies]);
   const prevSlide = () => setCurrentIndex((prev) => (prev === 0 ? heroMovies.length - 1 : prev - 1));
 
@@ -38,13 +48,40 @@ export default function Home() {
     return () => clearInterval(interval); 
   }, [heroMovies, nextSlide]);
 
+  // 3. Live Search Logic
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(async () => {
+      if (searchQuery.length > 2) {
+        setIsSearching(true);
+        try {
+          const res = await axios.get(`${API_BASE_URL}/api/search?q=${searchQuery}`);
+          setSuggestions(res.data);
+          setShowSuggestions(true);
+        } catch (err) { console.error(err); }
+        setIsSearching(false);
+      } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }, 300); // 300ms delay
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      setShowSuggestions(false);
+      router.push(`/search?q=${encodeURIComponent(searchQuery)}`);
+    }
+  };
+
   const getCategory = (criteria) => {
     if (!movies.length) return [];
     switch(criteria) {
       case 'trending': return movies.slice(0, 15);
       case 'popular_movies': return movies.filter(m => m.type === 'movie_popular').slice(0, 15);
       case 'netflix': return movies.filter(m => m.type === 'netflix').slice(0, 15);
-      // Removed Hotstar case
       case 'prime': return movies.filter(m => m.type === 'prime').slice(0, 15);
       case 'horror': return movies.filter(m => m.type === 'horror').slice(0, 15);
       case 'scifi': return movies.filter(m => m.type === 'scifi').slice(0, 15);
@@ -59,19 +96,66 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white selection:bg-cyan-500/30 pb-20">
-      <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-gradient-to-b from-black/80 to-transparent backdrop-blur-sm">
-        <div className="max-w-[1800px] mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 cursor-pointer drop-shadow-lg">CineVault</div>
-          <div className="flex items-center gap-6">
-            <Link href="/watchlist" className="text-gray-300 hover:text-white font-bold text-xs transition">My List</Link>
+      
+      {/* NAVBAR WITH SEARCH */}
+      <nav className="fixed top-0 w-full z-50 bg-black/80 backdrop-blur-md border-b border-white/5 shadow-2xl transition-all duration-300">
+        <div className="max-w-[1800px] mx-auto px-6 h-16 flex items-center gap-8">
+          <Link href="/"><div className="text-xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600 cursor-pointer drop-shadow-lg shrink-0">CineVault</div></Link>
+          
+          {/* SEARCH BAR */}
+          <div className="relative flex-1 max-w-xl hidden sm:block">
+            <form onSubmit={handleSearchSubmit} className="relative group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-cyan-400 transition" size={18} />
+              <input 
+                type="text" 
+                placeholder="Search movies, TV shows, anime..." 
+                className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:bg-white/10 transition text-white"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => searchQuery.length > 2 && setShowSuggestions(true)}
+              />
+              {isSearching && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-cyan-500" size={16} />}
+            </form>
+
+            {/* LIVE SUGGESTIONS DROPDOWN */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute top-full mt-2 w-full bg-[#111] border border-white/10 rounded-xl overflow-hidden shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
+                {suggestions.map((item) => (
+                  <Link 
+                    key={item.id} 
+                    href={`/${item.media_type === 'tv' ? 'tv' : 'movie'}/${item.id}`}
+                    onClick={() => setShowSuggestions(false)}
+                    className="flex items-center gap-4 p-3 hover:bg-white/5 transition border-b border-white/5 last:border-0 group"
+                  >
+                    <img src={item.poster_path ? `https://image.tmdb.org/t/p/w92${item.poster_path}` : '/placeholder.jpg'} className="w-10 h-14 object-cover rounded shadow group-hover:scale-105 transition" alt="" />
+                    <div>
+                      <div className="font-bold text-sm text-gray-200 group-hover:text-cyan-400 transition">{item.title || item.name}</div>
+                      <div className="text-xs text-gray-500 uppercase tracking-widest mt-1">
+                        {item.media_type} • {item.release_date?.split('-')[0] || item.first_air_date?.split('-')[0] || 'N/A'}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+                <button 
+                  onClick={handleSearchSubmit}
+                  className="w-full p-3 text-center text-xs font-bold text-cyan-400 hover:bg-cyan-400/10 transition uppercase tracking-widest"
+                >
+                  See all results for "{searchQuery}"
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-6 shrink-0">
+            <Link href="/watchlist" className="text-gray-300 hover:text-white font-bold text-xs transition hidden md:block">My List</Link>
             <Link href="/discover"><button className="px-5 py-2 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/5 transition font-bold text-xs">Browse Library</button></Link>
           </div>
         </div>
       </nav>
 
-      {/* Hero Reduced Height: 75vh */}
+      {/* HERO SECTION */}
       {heroMovie && (
-        <div className="relative w-full h-[75vh] flex items-center group">
+        <div className="relative w-full h-[75vh] flex items-center group mt-16">
           <div key={heroMovie._id} className="absolute inset-0 animate-in fade-in duration-1000">
             <img src={heroMovie.backdrop_path} alt={heroMovie.title} className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/30 to-transparent" />
@@ -97,11 +181,10 @@ export default function Home() {
         </div>
       )}
 
-      {/* Rows */}
+      {/* ROWS */}
       <div className="relative z-20 -mt-10 space-y-12 pl-6 md:pl-12">
         <Row title="Trending Now" id="trending" data={getCategory('trending')} />
         <Row title="Netflix Hits" id="netflix" data={getCategory('netflix')} />
-        {/* Removed Hotstar Row */}
         <Row title="Prime Video Picks" id="prime" data={getCategory('prime')} />
         <Row title="Popular Movies" id="movie_popular" data={getCategory('popular_movies')} />
         <Row title="Popular TV Shows" id="tv_popular" data={getCategory('tv_popular')} />

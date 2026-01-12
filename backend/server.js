@@ -40,6 +40,29 @@ app.get('/api/movies', async (req, res) => {
   res.json(movies);
 });
 
+// 👇 NEW: Search Route (Handles Movies & TV)
+app.get('/api/search', async (req, res) => {
+    try {
+        const { q } = req.query;
+        if (!q) return res.json([]);
+
+        const response = await fetchWithRetry(`https://api.themoviedb.org/3/search/multi`, { 
+            api_key: API_KEY,
+            query: q,
+            include_adult: false
+        });
+        
+        // Filter: Only Movies/TV with Posters
+        const filtered = response.data.results
+            .filter(item => (item.media_type === 'movie' || item.media_type === 'tv') && item.poster_path)
+            .slice(0, 10); // Limit results
+        
+        res.json(filtered);
+    } catch (err) {
+        res.status(500).json({ error: "Search failed" });
+    }
+});
+
 app.get('/api/movies/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -105,7 +128,7 @@ app.get('/api/movies/:id', async (req, res) => {
     res.json(formattedData);
 
   } catch (err) {
-    console.error(err);
+    console.error("Backend Error:", err.message);
     res.status(500).json({ error: "Sync failed" });
   }
 });
@@ -150,26 +173,15 @@ app.get('/api/tv/:id/season/:seasonNumber', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Failed to fetch season" }); }
 });
 
-// 👇 UPDATED ROUTE: Single Episode Details + Streaming Providers
 app.get('/api/tv/:id/season/:seasonNumber/episode/:episodeNumber', async (req, res) => {
     try {
       const { id, seasonNumber, episodeNumber } = req.params;
-      
-      // 1. Fetch Episode Details
       const episodeRes = await fetchWithRetry(`https://api.themoviedb.org/3/tv/${id}/season/${seasonNumber}/episode/${episodeNumber}`, { 
           api_key: API_KEY,
           append_to_response: 'images,credits,videos,external_ids'
       });
-
-      // 2. Fetch TV Show Providers (Providers apply to the whole show)
       const providerRes = await fetchWithRetry(`https://api.themoviedb.org/3/tv/${id}/watch/providers`, { api_key: API_KEY });
-
-      // 3. Merge Data
-      const data = {
-          ...episodeRes.data,
-          providers: providerRes.data.results || {}
-      };
-
+      const data = { ...episodeRes.data, providers: providerRes.data.results || {} };
       res.json(data);
     } catch (err) { 
         console.error("Backend Error:", err.message);
