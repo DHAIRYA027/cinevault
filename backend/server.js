@@ -72,83 +72,143 @@ app.get('/api/search', async (req, res) => {
     } catch (err) { res.status(500).json({ error: "Search failed" }); }
 });
 
-// 3. Get Movie Details - ⚡️ WITH CACHE
+// 3. Get Movie/TV Details - ⚡️ UPDATED FIX FOR "N/A"
 app.get('/api/movies/:id', async (req, res) => {
   const { id } = req.params;
-  const typeParam = req.query.type;
   
-  // Check Cache First (Key = ID + Type)
-  const cacheKey = `movie_${id}_${typeParam}`;
+  // 1. Force correct type logic (Fixes Anime/TV detection)
+  const queryType = req.query.type;
+  let type = 'movie'; 
+  if (queryType === 'tv' || queryType === 'anime') type = 'tv';
+
+  // 2. Check Cache
+  const cacheKey = `movie_${id}_${type}`;
   const cachedMovie = cache.get(cacheKey);
   if (cachedMovie) return res.json(cachedMovie);
 
   try {
     let movieData = null;
-    if (mongoose.Types.ObjectId.isValid(id)) movieData = await Movie.findById(id);
+    // Check if ID is a Mongo Object ID (local DB fetch)
+    if (mongoose.Types.ObjectId.isValid(id)) {
+        movieData = await Movie.findById(id);
+    }
+    
+    // If not found by Mongo ID, or it was a TMDB ID, define query
     if (!movieData) {
         const query = { tmdbId: id };
-        if (req.query.type) query.type = req.query.type;
+        if (req.query.type) query.type = type;
         movieData = await Movie.findOne(query);
     }
-    const type = req.query.type || (movieData ? movieData.type : 'movie');
-    const endpointType = (type === 'anime' || type === 'tv') ? 'tv' : 'movie';
+
+    // 3. Fetch from TMDB (Using correct endpoint: 'tv' or 'movie')
+    const endpointType = type === 'tv' ? 'tv' : 'movie';
+    // Use the TMDB ID from local DB if available, otherwise assume param is TMDB ID
     const lookupId = movieData?.tmdbId || id;
 
     const tmdbRes = await fetchWithRetry(`https://api.themoviedb.org/3/${endpointType}/${lookupId}`, { 
       api_key: API_KEY,
-      append_to_response: 'credits,recommendations,images,reviews,watch/providers,videos' 
+      append_to_response: 'credits,recommendations,images,reviews,watch/providers,videos,external_ids' 
     });
     
-    const liveItem = tmdbRes.data;
-    const directors = liveItem.credits?.crew?.filter(c => c.job === 'Director').map(c => c.name) || [];
-    const writers = liveItem.credits?.crew?.filter(c => ['Screenplay', 'Writer', 'Story', 'Creator'].includes(c.job)).map(c => c.name).slice(0, 3) || [];
-    const trailer = liveItem.videos?.results?.find(v => v.type === "Trailer" && v.site === "YouTube") || liveItem.videos?.results?.[0];
+    const data = tmdbRes.data;
 
+    // 4. DATA NORMALIZATION (The Fix for "N/A")
+    const isTv = type === 'tv';
+
+    // A. Fix Director vs Creator
+    const directors = isTv 
+      ? data.created_by?.map(c => c.name) || [] 
+      : data.credits?.crew?.filter(c => c.job === 'Director').map(c => c.name) || [];
+
+    // B. Fix Writers
+    const writers = data.credits?.crew
+      ?.filter(c => ['Screenplay', 'Writer', 'Story', 'Creator'].includes(c.job))
+      .map(c => c.name).slice(0, 3) || [];
+
+    // C. Fix Trailer (Find YouTube Trailer)
+    const trailer = data.videos?.results?.find(v => v.type === "Trailer" && v.site === "YouTube") 
+      || data.videos?.results?.find(v => v.site === "YouTube");
+
+    // D. Prepare Database Update Object
     const updateData = {
-        tmdbId: liveItem.id,
-        title: liveItem.title || liveItem.name,
-        overview: liveItem.overview,
-        tagline: liveItem.tagline,
-        poster_path: liveItem.poster_path ? `https://image.tmdb.org/t/p/w500${liveItem.poster_path}` : null,
-        backdrop_path: liveItem.backdrop_path ? `https://image.tmdb.org/t/p/original${liveItem.backdrop_path}` : null,
-        release_date: liveItem.release_date || liveItem.first_air_date,
-        vote_average: liveItem.vote_average,
-        vote_count: liveItem.vote_count,
-        status: liveItem.status,
-        runtime: liveItem.runtime || liveItem.episode_run_time?.[0],
-        budget: liveItem.budget,
-        revenue: liveItem.revenue,
-        original_language: liveItem.original_language,
+        tmdbId: data.id,
+        title: isTv ? data.name : data.title,
+        overview: data.overview,
+        tagline: data.tagline,
+        poster_path: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : null,
+        backdrop_path: data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : null,
+        
+        // Fix Dates
+        release_date: isTv ? data.first_air_date : data.release_date,
+        releaseYear: (isTv ? data.first_air_date : data.release_date)?.substring(0, 4) || 'N/A',
+        
+        // Fix Runtime (TV uses array)
+        runtime: isTv ? (data.episode_run_time?.[0] || 0) : data.runtime,
+        
+        vote_average: data.vote_average || 0,
+        vote_count: data.vote_count,
+        status: data.status,
+        
+        // Fix Budget (Set 0 for TV to hide it on frontend)
+        budget: isTv ? 0 : (data.budget || 0),
+        revenue: isTv ? 0 : (data.revenue || 0),
+        
+        original_language: data.original_language,
         type: type,
-        seasons: liveItem.seasons,
-        genres: liveItem.genres?.map(g => g.name) || []
+        seasons: isTv ? data.seasons : null,
+        genres: data.genres?.map(g => g.name) || []
     };
 
+    // 5. Update MongoDB
     movieData = await Movie.findOneAndUpdate(
-        { tmdbId: liveItem.id, type: type },
+        { tmdbId: data.id, type: type },
         { $set: updateData },
         { upsert: true, new: true }
     );
 
+    // 6. Format Response for Frontend
     const formattedData = {
       ...updateData,
       _id: movieData._id,
       userReviews: movieData.userReviews || [],
-      cast: liveItem.credits?.cast?.slice(0, 10) || [],
-      directors, writers, trailerKey: trailer?.key, 
-      recommendations: liveItem.recommendations?.results?.slice(0, 10).map(r => ({
-        tmdbId: r.id, title: r.title || r.name, poster_path: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null, vote_average: r.vote_average, type: type
+      
+      // Cast with Images
+      cast: data.credits?.cast?.slice(0, 15).map(c => ({
+          id: c.id,
+          name: c.name,
+          character: c.character,
+          profile_path: c.profile_path ? `https://image.tmdb.org/t/p/w185${c.profile_path}` : null
+      })) || [],
+      
+      directors, 
+      writers, 
+      trailerKey: trailer?.key, 
+      
+      // Recommendations (Filtered)
+      recommendations: data.recommendations?.results?.slice(0, 8).map(r => ({
+        tmdbId: r.id, 
+        title: r.title || r.name, 
+        poster_path: r.poster_path ? `https://image.tmdb.org/t/p/w500${r.poster_path}` : null, 
+        vote_average: r.vote_average, 
+        type: type 
       })).filter(i => i.poster_path),
-      screenshots: liveItem.images?.backdrops?.slice(0, 6).map(img => `https://image.tmdb.org/t/p/original${img.file_path}`),
-      reviews: liveItem.reviews?.results?.slice(0, 5),
-      providers: liveItem['watch/providers']?.results || {}
+      
+      // Screenshots for Gallery
+      screenshots: data.images?.backdrops?.slice(0, 6).map(img => `https://image.tmdb.org/t/p/original${img.file_path}`) || [],
+      
+      // TMDB Reviews
+      reviews: data.reviews?.results?.slice(0, 5) || [],
+      providers: data['watch/providers']?.results || {}
     };
 
-    // Save to Cache
+    // 7. Save to Cache and Response
     cache.set(cacheKey, formattedData);
-
     res.json(formattedData);
-  } catch (err) { res.status(500).json({ error: "Sync failed" }); }
+
+  } catch (err) { 
+      console.error("Backend Error:", err.message); 
+      res.status(500).json({ error: "Sync failed" }); 
+  }
 });
 
 // 4. Submit Review

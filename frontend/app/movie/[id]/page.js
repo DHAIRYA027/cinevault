@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
-import { PlayCircle, Star, Calendar, Clock, ChevronLeft, User, Image as ImageIcon, MessageSquare, Plus, Globe, DollarSign, Activity, ExternalLink } from 'lucide-react';
+import { Star, Play, Plus, Calendar, Clock, User, ChevronRight } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 import { API_BASE_URL } from '@/config';
 import WatchlistButton from '@/components/WatchlistButton';
@@ -11,348 +11,270 @@ import WatchlistButton from '@/components/WatchlistButton';
 export default function MoviePage() {
     const { id } = useParams();
     const searchParams = useSearchParams();
-    const typeParam = searchParams.get('type') || 'movie'; 
+    const typeParam = searchParams.get('type') || 'movie';
     const { user } = useUser();
     
     const [movie, setMovie] = useState(null);
     const [loading, setLoading] = useState(true);
-    
-    // Review States
-    const [showReviewForm, setShowReviewForm] = useState(false);
+
+    // Review Form State
     const [reviewContent, setReviewContent] = useState('');
-    const [reviewRating, setReviewRating] = useState(10);
+    const [reviewRating, setReviewRating] = useState(8);
     const [submitting, setSubmitting] = useState(false);
 
-    const fetchMovie = async () => {
-        try {
-            const res = await axios.get(`${API_BASE_URL}/api/movies/${id}?type=${typeParam}`);
-            setMovie(res.data);
-        } catch (err) {
-            console.error("Failed to fetch movie", err);
-        }
-        setLoading(false);
-    };
-
     useEffect(() => {
+        const fetchMovie = async () => {
+            try {
+                const res = await axios.get(`${API_BASE_URL}/api/movies/${id}?type=${typeParam}`);
+                setMovie(res.data);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        };
         if (id) fetchMovie();
     }, [id, typeParam]);
 
     const handleReviewSubmit = async (e) => {
         e.preventDefault();
-        if (!user) return alert("Please sign in to review!");
+        if (!user) return alert("Please sign in.");
         setSubmitting(true);
         try {
             await axios.post(`${API_BASE_URL}/api/reviews/${movie.tmdbId}`, {
-                author: user.fullName || user.username || "Movie Fan",
+                author: user.fullName || user.username || "User",
                 content: reviewContent,
                 rating: reviewRating,
-                type: typeParam
+                type: movie.type
             });
-            setShowReviewForm(false);
+            alert("Review submitted!");
             setReviewContent('');
-            fetchMovie(); 
-        } catch (err) {
-            alert("Failed to post review");
-        }
+        } catch (e) { alert("Failed to submit."); }
         setSubmitting(false);
     };
 
-    const formatMoney = (amount) => {
-        if (!amount || amount === 0) return 'N/A';
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
-    };
+    if (loading) return <div className="min-h-screen bg-[#1F1F1F] text-white flex justify-center items-center">Loading...</div>;
+    if (!movie) return <div className="min-h-screen bg-[#1F1F1F] text-white flex justify-center items-center">Movie not found</div>;
 
-    const formatRuntime = (mins) => {
-        if (!mins) return '';
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        return `${h}h ${m}m`;
-    };
-
-    const formatDate = (dateString) => {
-        if (!dateString) return 'N/A';
-        return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    };
-
-    // 👇 SMART LINK LOGIC (Platform Detector)
-    const getWatchLink = () => {
-        if (!movie) return null;
-
-        // 1. Prioritize Homepage if it matches a known streaming site
-        const homepage = movie.homepage || '';
-        if (homepage.includes('netflix.com')) return { url: homepage, label: 'Watch on Netflix', color: 'bg-red-600 hover:bg-red-700 text-white' };
-        if (homepage.includes('primevideo.com')) return { url: homepage, label: 'Watch on Prime', color: 'bg-blue-500 hover:bg-blue-600 text-white' };
-        if (homepage.includes('hotstar.com')) return { url: homepage, label: 'Watch on Hotstar', color: 'bg-[#0c112b] hover:bg-[#1f2851] text-white border border-white/20' };
-
-        // 2. Check "Providers" Data (What platform has the rights in India?)
-        if (movie.providers && movie.providers.IN) {
-            const IN = movie.providers.IN;
-            // combine flatrate (subscription) and free
-            const sources = [...(IN.flatrate || []), ...(IN.free || [])];
-
-            const findProvider = (name) => sources.find(p => p.provider_name.toLowerCase().includes(name));
-
-            // Netflix
-            if (findProvider('netflix')) {
-                return { 
-                    url: `https://www.netflix.com/search?q=${encodeURIComponent(movie.title)}`, 
-                    label: 'Watch on Netflix',
-                    color: 'bg-[#E50914] hover:bg-[#b20710] text-white'
-                };
-            }
-            // Amazon Prime
-            if (findProvider('amazon prime')) {
-                return { 
-                    url: `https://www.primevideo.com/search/ref=atv_nb_sr?phrase=${encodeURIComponent(movie.title)}`, 
-                    label: 'Watch on Prime',
-                    color: 'bg-[#00A8E1] hover:bg-[#008dbd] text-white'
-                };
-            }
-            // Hotstar / Disney+
-            if (findProvider('hotstar')) {
-                return { 
-                    url: `https://www.hotstar.com/in/search?q=${encodeURIComponent(movie.title)}`, 
-                    label: 'Watch on Hotstar',
-                    color: 'bg-[#131A27] hover:bg-[#202A3D] text-white border border-white/20'
-                };
-            }
-            // JioCinema
-            if (findProvider('jiocinema')) {
-                return { 
-                    url: `https://www.jiocinema.com/search/${encodeURIComponent(movie.title)}`, 
-                    label: 'Watch on JioCinema',
-                    color: 'bg-[#D4237E] hover:bg-[#b01c68] text-white'
-                };
-            }
-            // Crunchyroll (Anime)
-            if (findProvider('crunchyroll')) {
-                return { 
-                    url: `https://www.crunchyroll.com/search?q=${encodeURIComponent(movie.title)}`, 
-                    label: 'Watch on Crunchyroll',
-                    color: 'bg-[#F47521] hover:bg-[#d66015] text-white'
-                };
-            }
-        }
-
-        // 3. Fallback: Official Watch Options Page from API
-        if (movie.providers?.IN?.link) return { url: movie.providers.IN.link, label: 'Watch Options', color: 'bg-white text-black hover:scale-105' };
-        if (movie.providers?.US?.link) return { url: movie.providers.US.link, label: 'Watch Options', color: 'bg-white text-black hover:scale-105' };
-
-        // 4. Last Resort: Google Search
-        return { 
-            url: `https://www.google.com/search?q=watch+${encodeURIComponent(movie.title)}+online`, 
-            label: 'Find Where to Watch',
-            color: 'bg-white/10 text-white hover:bg-white/20'
-        };
-    };
-
-    const watchAction = getWatchLink();
-
-    // Combine Local and Public Reviews
-    const allReviews = [
-        ...(movie?.userReviews || []),
-        ...(movie?.reviews || [])
-    ];
-
-    if (loading) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-bold text-xl">Loading...</div>;
-    if (!movie) return <div className="min-h-screen bg-black text-white flex items-center justify-center font-bold text-xl">Movie not found</div>;
+    const isTv = movie.type === 'tv';
 
     return (
-        <main className="min-h-screen bg-[#0a0a0a] text-white pb-20">
-            
-            {/* BACKDROP HEADER */}
-            <div className="relative w-full h-[70vh] md:h-[85vh]">
-                <div className="absolute inset-0">
-                    <img 
-                        src={movie.backdrop_path || movie.poster_path} 
-                        className="w-full h-full object-cover opacity-60" 
-                        alt={movie.title} 
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/50 to-transparent" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent" />
-                </div>
-
-                <Link href="/" className="absolute top-6 left-6 z-50 bg-white/10 p-3 rounded-full hover:bg-white/20 backdrop-blur-md transition">
-                    <ChevronLeft size={24} />
-                </Link>
-
-                <div className="absolute bottom-0 left-0 w-full p-6 md:p-12 z-10 flex flex-col md:flex-row gap-10 items-end">
+        <div className="min-h-screen bg-[#1F1F1F] text-gray-100 font-sans pb-20">
+            <div className="max-w-7xl mx-auto px-4 pt-6">
+                
+                {/* --- 1. HEADER SECTION (Title & Ratings) --- */}
+                <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
+                    <div>
+                        <h1 className="text-4xl md:text-5xl font-normal text-white mb-2">{movie.title}</h1>
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400">
+                            <span className="uppercase border border-gray-600 px-1 rounded text-xs font-bold">{isTv ? 'TV Series' : 'Movie'}</span>
+                            <span>{movie.releaseYear}</span>
+                            <span>{movie.runtime ? `${movie.runtime} min` : 'N/A'}</span>
+                        </div>
+                    </div>
                     
-                    {/* POSTER */}
-                    <img 
-                        src={movie.poster_path} 
-                        className="hidden md:block w-64 rounded-xl shadow-2xl border border-white/10"
-                        alt={movie.title}
-                    />
-
-                    <div className="max-w-4xl space-y-6 mb-6">
-                        {/* METADATA */}
-                        <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-gray-300">
-                            <span className="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded text-xs border border-yellow-500/30 flex items-center gap-1">
-                                <Star size={12} fill="currentColor" /> {movie.vote_average?.toFixed(1)}
-                            </span>
-                            <span className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full"><Calendar size={14} /> {movie.release_date?.split('-')[0]}</span>
-                            {movie.runtime && <span className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full"><Clock size={14} /> {formatRuntime(movie.runtime)}</span>}
-                            
-                            {movie.genres?.slice(0,3).map(g => (
-                                <span key={g} className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full text-xs">
-                                    {typeof g === 'string' ? g : 'Reload Page'}
-                                </span>
-                            ))}
+                    {/* IMDb Style Rating Box */}
+                    <div className="flex items-center gap-6">
+                        <div className="flex flex-col items-center">
+                            <span className="text-gray-400 text-xs font-bold tracking-widest uppercase">IMDb RATING</span>
+                            <div className="flex items-center gap-2">
+                                <Star className="text-yellow-500 fill-yellow-500" size={28} />
+                                <div className="flex flex-col">
+                                    <span className="text-xl font-bold text-white">{movie.vote_average?.toFixed(1)}<span className="text-gray-500 text-sm">/10</span></span>
+                                </div>
+                            </div>
                         </div>
-
-                        {/* TITLE */}
-                        <div>
-                            <h1 className="text-4xl md:text-6xl font-black leading-tight tracking-tight drop-shadow-2xl">
-                                {movie.title || movie.name}
-                            </h1>
-                            {movie.tagline && <p className="text-xl text-cyan-400/80 italic mt-2 font-medium">"{movie.tagline}"</p>}
-                        </div>
-
-                        {/* OVERVIEW */}
-                        <p className="text-lg text-gray-300 leading-relaxed max-w-2xl line-clamp-4 md:line-clamp-none">
-                            {movie.overview}
-                        </p>
-
-                        {/* ACTION BUTTONS */}
-                        <div className="flex flex-wrap items-center gap-4 pt-4">
-                            
-                            {/* SMART WATCH BUTTON */}
-                            {watchAction ? (
-                                <a href={watchAction.url} target="_blank" rel="noopener noreferrer">
-                                    <button className={`${watchAction.color} px-8 py-3 rounded-full font-bold text-lg flex items-center gap-2 transition shadow-[0_0_20px_rgba(255,255,255,0.2)]`}>
-                                        <PlayCircle size={24} fill="currentColor" /> {watchAction.label}
-                                    </button>
-                                </a>
-                            ) : (
-                                <button disabled className="bg-white/20 text-gray-400 px-8 py-3 rounded-full font-bold text-lg flex items-center gap-2 cursor-not-allowed">
-                                    <PlayCircle size={24} /> Unavailable
-                                </button>
-                            )}
-
-                            <WatchlistButton movie={movie} />
+                        <div className="flex flex-col items-center">
+                             <span className="text-gray-400 text-xs font-bold tracking-widest uppercase">YOUR RATING</span>
+                             <button className="flex items-center gap-1 text-blue-400 hover:bg-white/5 px-2 py-1 rounded transition">
+                                <Star className="text-blue-400" size={20} /> <span className="font-bold">Rate</span>
+                             </button>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* REST OF PAGE */}
-            <div className="max-w-[1800px] mx-auto px-6 py-12 grid grid-cols-1 lg:grid-cols-3 gap-12">
-                <div className="lg:col-span-2 space-y-12">
-                    <section>
-                        <h3 className="text-2xl font-bold flex items-center gap-2 mb-6"><User className="text-cyan-400" /> Top Cast</h3>
-                        <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-                            {movie.cast?.map((actor) => (
-                                <div key={actor.id} className="min-w-[100px] md:min-w-[120px] text-center space-y-2">
-                                    <img 
-                                        src={actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : '/placeholder_user.png'} 
-                                        className="w-full h-32 md:h-40 object-cover rounded-xl border border-white/5 bg-white/5" 
-                                        alt={actor.name} 
-                                    />
-                                    <p className="text-sm font-medium text-gray-200 line-clamp-1">{actor.name}</p>
-                                    <p className="text-xs text-gray-500 line-clamp-1">{actor.character}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
+                {/* --- 2. HERO GRID (Poster | Trailer | Sidebar) --- */}
+                <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr_260px] gap-2 mb-10">
                     
-                    {movie.screenshots && movie.screenshots.length > 0 && (
+                    {/* A. Poster */}
+                    <div className="relative group">
+                        <img src={movie.poster_path} alt={movie.title} className="w-full h-auto object-cover rounded shadow-lg" />
+                        <div className="absolute top-0 left-0 bg-black/60 text-white p-1 rounded-br">
+                            <Plus className="w-6 h-6" />
+                        </div>
+                    </div>
+
+                    {/* B. Trailer / Video Player */}
+                    <div className="bg-black relative group flex items-center justify-center min-h-[400px]">
+                        {movie.trailerKey ? (
+                            <iframe 
+                                className="w-full h-full absolute inset-0"
+                                src={`https://www.youtube.com/embed/${movie.trailerKey}?autoplay=0`}
+                                title="Trailer"
+                                allowFullScreen
+                            />
+                        ) : (
+                            <div className="text-center">
+                                <Play className="w-16 h-16 text-gray-600 mx-auto mb-2" />
+                                <span className="text-gray-500">No Trailer Available</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* C. Quick Links Sidebar */}
+                    <div className="hidden lg:flex flex-col gap-2">
+                         <div className="bg-[#2C2C2C] p-4 rounded h-full flex flex-col gap-3">
+                             {/* Watchlist Button */}
+                             <WatchlistButton movie={movie} />
+                             
+                             <div className="mt-4 space-y-4">
+                                <div>
+                                    <span className="block text-gray-400 text-xs font-bold mb-1">Genres</span>
+                                    <div className="flex flex-wrap gap-2">
+                                        {movie.genres.slice(0, 3).map(g => (
+                                            <span key={g} className="border border-gray-500 rounded-full px-3 py-1 text-xs hover:bg-white/10 cursor-pointer">{g}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                                {isTv && (
+                                    <div>
+                                        <span className="block text-gray-400 text-xs font-bold mb-1">Seasons</span>
+                                        <span className="text-white font-bold">{movie.seasons?.length || 1} Seasons</span>
+                                    </div>
+                                )}
+                             </div>
+                         </div>
+                    </div>
+                </div>
+
+                {/* --- 3. MAIN CONTENT BODY --- */}
+                <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-10">
+                    
+                    {/* LEFT COLUMN */}
+                    <div className="space-y-10">
+                        
+                        {/* Overview */}
                         <section>
-                            <h3 className="text-2xl font-bold flex items-center gap-2 mb-6"><ImageIcon className="text-purple-400" /> Photos</h3>
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                {movie.screenshots.slice(0, 6).map((src, i) => (
-                                    <img key={i} src={src} className="w-full h-32 md:h-48 object-cover rounded-xl border border-white/5 hover:scale-105 transition duration-500" alt="Scene" />
+                            <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                                {movie.genres.map(g => (
+                                    <span key={g} className="bg-[#2C2C2C] px-4 py-1 rounded-full text-sm border border-gray-700 whitespace-nowrap">{g}</span>
+                                ))}
+                            </div>
+                            <p className="text-lg leading-relaxed text-white">{movie.overview}</p>
+                            
+                            <div className="mt-6 border-t border-gray-700 pt-4 space-y-3">
+                                <div className="flex gap-4">
+                                    <span className="font-bold text-white min-w-[80px]">{isTv ? 'Creators' : 'Director'}</span>
+                                    <span className="text-blue-400">{movie.directors.length > 0 ? movie.directors.join(', ') : 'N/A'}</span>
+                                </div>
+                                <div className="flex gap-4">
+                                    <span className="font-bold text-white min-w-[80px]">Writers</span>
+                                    <span className="text-blue-400">{movie.writers.length > 0 ? movie.writers.join(', ') : 'N/A'}</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Top Cast */}
+                        <section>
+                            <h3 className="text-2xl font-bold text-yellow-500 mb-4 border-l-4 border-yellow-500 pl-3 flex items-center justify-between">
+                                Top Cast <ChevronRight className="text-white" />
+                            </h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                {movie.cast.map(actor => (
+                                    <div key={actor.id} className="flex items-center gap-3 bg-[#2C2C2C] p-2 rounded hover:bg-[#383838] transition">
+                                        <img 
+                                            src={actor.profile_path || '/placeholder_user.png'} 
+                                            className="w-12 h-12 rounded-full object-cover" 
+                                            alt={actor.name} 
+                                        />
+                                        <div className="overflow-hidden">
+                                            <p className="font-bold text-sm truncate text-white">{actor.name}</p>
+                                            <p className="text-xs text-gray-400 truncate">{actor.character}</p>
+                                        </div>
+                                    </div>
                                 ))}
                             </div>
                         </section>
-                    )}
 
-                    {/* REVIEWS SECTION */}
-                    <section>
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-2xl font-bold flex items-center gap-2">
-                                <MessageSquare className="text-green-400" /> Reviews <span className="text-gray-500 text-lg">({allReviews.length})</span>
-                            </h3>
-                            <button onClick={() => setShowReviewForm(!showReviewForm)} className="text-sm font-bold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full transition flex items-center gap-2"><Plus size={16} /> Write Review</button>
-                        </div>
-                        
-                        {showReviewForm && (
-                            <form onSubmit={handleReviewSubmit} className="bg-white/5 p-6 rounded-2xl mb-8 border border-white/10 animate-in fade-in slide-in-from-top-2">
-                                <textarea className="w-full bg-black/50 border border-white/10 rounded-xl p-4 text-white focus:border-cyan-500 outline-none min-h-[100px]" placeholder="Write your thoughts..." value={reviewContent} onChange={e => setReviewContent(e.target.value)} required />
-                                <div className="flex items-center justify-between mt-4">
-                                    <div className="flex items-center gap-2"><span className="text-sm text-gray-400">Rating:</span><input type="number" min="1" max="10" value={reviewRating} onChange={e => setReviewRating(e.target.value)} className="bg-black/50 border border-white/10 rounded-lg w-16 px-2 py-1 text-center"/><Star size={16} className="text-yellow-400" fill="currentColor" /></div>
-                                    <button disabled={submitting} className="bg-cyan-500 text-black font-bold px-6 py-2 rounded-full hover:bg-cyan-400 transition">{submitting ? 'Posting...' : 'Post Review'}</button>
-                                </div>
-                            </form>
-                        )}
-
-                        <div className="space-y-4">
-                            {allReviews.length > 0 ? (
-                                allReviews.map((review, i) => (
-                                    <div key={i} className="bg-white/5 p-6 rounded-xl border border-white/5">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="font-bold text-cyan-400">
-                                                {review.author || review.author_details?.username || "Anonymous"}
-                                            </span>
-                                            <span className="text-xs text-gray-500">
-                                                {review.date ? new Date(review.date).toLocaleDateString() : review.created_at ? new Date(review.created_at).toLocaleDateString() : ''}
-                                            </span>
+                        {/* User Reviews */}
+                        <section>
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-2xl font-bold text-yellow-500 border-l-4 border-yellow-500 pl-3">User Reviews</h3>
+                                <span className="bg-white text-black px-3 py-1 rounded text-sm font-bold cursor-pointer hover:bg-gray-200" onClick={() => document.getElementById('reviewForm').scrollIntoView()}>+ Review</span>
+                            </div>
+                            
+                            <div className="space-y-4">
+                                {movie.reviews?.length > 0 ? movie.reviews.map((r, i) => (
+                                    <div key={i} className="bg-[#2C2C2C] p-4 rounded border border-gray-700">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className="font-bold text-blue-400">{r.author}</span>
+                                            <span className="flex items-center gap-1 text-yellow-500 text-sm"><Star size={12} fill="currentColor"/> {r.author_details?.rating || '?'}</span>
                                         </div>
-                                        <div className="flex items-center gap-1 text-yellow-400 text-xs mb-3">
-                                            <Star size={12} fill="currentColor" /> 
-                                            {review.rating || review.author_details?.rating || '?'} / 10
-                                        </div>
-                                        <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line">
-                                            {review.content}
-                                        </p>
+                                        <p className="text-gray-300 text-sm line-clamp-3">{r.content}</p>
                                     </div>
-                                ))
-                            ) : (<p className="text-gray-500 italic">No reviews yet. Be the first to review!</p>)}
-                        </div>
-                    </section>
-                </div>
+                                )) : <p className="text-gray-500 italic">No reviews yet.</p>}
+                            </div>
 
-                {/* Right Info Column */}
-                <div className="space-y-8">
-                    {movie.trailerKey && (
-                        <div className="rounded-2xl overflow-hidden border border-white/10 bg-black shadow-2xl">
-                            <iframe className="w-full aspect-video" src={`https://www.youtube.com/embed/${movie.trailerKey}`} title="Trailer" allowFullScreen></iframe>
-                        </div>
-                    )}
-                    
-                    <div className="bg-white/5 p-6 rounded-2xl border border-white/5 space-y-6">
-                        <h4 className="font-bold text-gray-400 uppercase text-xs tracking-widest border-b border-white/5 pb-2">Movie Info</h4>
-                        <div className="space-y-4 text-sm">
-                            <div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><Calendar size={14} /> Release Date</span> <span className="font-medium text-right">{formatDate(movie.release_date)}</span></div>
-                            <div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><Globe size={14} /> Language</span> <span className="font-medium uppercase">{movie.original_language || 'EN'}</span></div>
-                            {movie.budget > 0 && (<div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><DollarSign size={14} /> Budget</span> <span className="font-medium text-green-400">{formatMoney(movie.budget)}</span></div>)}
-                             {movie.revenue > 0 && (<div className="flex justify-between items-center"><span className="text-gray-500 flex items-center gap-2"><Activity size={14} /> Revenue</span> <span className="font-medium text-green-400">{formatMoney(movie.revenue)}</span></div>)}
-                            <div className="flex justify-between items-center"><span className="text-gray-500">Status</span> <span className={`px-2 py-0.5 rounded text-xs font-bold ${movie.status === 'Released' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>{movie.status || 'Released'}</span></div>
-                        </div>
-                        
-                        <div className="pt-4 border-t border-white/5 space-y-3">
-                            <div><span className="block text-gray-500 text-xs mb-1">Director</span> <span className="font-medium">{movie.directors?.join(', ') || 'Unknown'}</span></div>
-                            <div><span className="block text-gray-500 text-xs mb-1">Writers</span> <span className="font-medium">{movie.writers?.join(', ') || 'Unknown'}</span></div>
-                        </div>
+                            {/* Simple Review Form */}
+                            <div id="reviewForm" className="mt-8 bg-[#252525] p-6 rounded border border-gray-700">
+                                <h4 className="font-bold mb-4">Write a Review</h4>
+                                <textarea 
+                                    className="w-full bg-black border border-gray-600 rounded p-3 text-white mb-4 focus:border-yellow-500 outline-none" 
+                                    rows="3"
+                                    placeholder="Your thoughts..."
+                                    value={reviewContent}
+                                    onChange={e => setReviewContent(e.target.value)}
+                                />
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm">Rating:</span>
+                                        <input type="number" max="10" min="1" value={reviewRating} onChange={e => setReviewRating(e.target.value)} className="w-16 bg-black border border-gray-600 rounded p-1 text-center" />
+                                    </div>
+                                    <button onClick={handleReviewSubmit} disabled={submitting} className="bg-yellow-500 text-black px-6 py-2 rounded font-bold hover:bg-yellow-400">Post</button>
+                                </div>
+                            </div>
+                        </section>
                     </div>
 
-                    {movie.recommendations && movie.recommendations.length > 0 && (
-                        <div>
-                            <h3 className="font-bold text-gray-400 uppercase text-xs tracking-widest mb-4">You might also like</h3>
+                    {/* RIGHT COLUMN (Sidebar) */}
+                    <div className="space-y-8">
+                        
+                        {/* More Like This */}
+                        <section>
+                            <h3 className="font-bold text-lg mb-4 text-white">More like this</h3>
                             <div className="grid grid-cols-2 gap-3">
                                 {movie.recommendations.slice(0, 6).map(rec => (
-                                    <Link key={rec.tmdbId} href={`/movie/${rec.tmdbId}?type=${rec.type || 'movie'}`} className="group relative aspect-[2/3] rounded-xl overflow-hidden bg-white/5">
-                                        <img src={rec.poster_path} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition duration-500" alt="" />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition flex items-end p-2">
-                                            <p className="text-xs font-bold line-clamp-2">{rec.title}</p>
+                                    <Link href={`/movie/${rec.tmdbId}?type=${rec.type}`} key={rec.tmdbId} className="group">
+                                        <div className="relative aspect-[2/3] mb-2">
+                                            <img src={rec.poster_path} className="w-full h-full object-cover rounded" alt={rec.title} />
+                                            <div className="absolute top-2 right-2 bg-black/60 px-1 rounded flex items-center gap-1">
+                                                <Star size={10} className="text-yellow-500 fill-yellow-500"/>
+                                                <span className="text-xs font-bold text-white">{rec.vote_average?.toFixed(1)}</span>
+                                            </div>
                                         </div>
+                                        <p className="text-sm font-medium text-gray-300 group-hover:text-blue-400 truncate">{rec.title}</p>
                                     </Link>
                                 ))}
                             </div>
-                        </div>
-                    )}
+                        </section>
+
+                        {/* Screenshots */}
+                        {movie.screenshots?.length > 0 && (
+                            <section>
+                                <h3 className="font-bold text-lg mb-4 text-white flex justify-between items-center">
+                                    Photos <span className="text-xs text-gray-500 bg-gray-800 px-2 py-1 rounded">{movie.screenshots.length}</span>
+                                </h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {movie.screenshots.slice(0, 4).map((src, i) => (
+                                        <img key={i} src={src} className="w-full h-24 object-cover rounded hover:opacity-80 cursor-pointer" />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+                    </div>
+
                 </div>
             </div>
-        </main>
+        </div>
     );
 }
