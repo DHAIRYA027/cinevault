@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import axios from 'axios';
 import Link from 'next/link';
 import { Star, Play, Plus, Calendar, Clock, User, ChevronRight } from 'lucide-react';
@@ -8,13 +8,11 @@ import { useUser } from '@clerk/nextjs';
 import { API_BASE_URL } from '@/config';
 import WatchlistButton from '@/components/WatchlistButton';
 
-export default function MoviePage() {
+export default function TvPage() {
     const { id } = useParams();
-    const searchParams = useSearchParams();
-    const typeParam = searchParams.get('type') || 'movie';
     const { user } = useUser();
     
-    const [movie, setMovie] = useState(null);
+    const [show, setShow] = useState(null);
     const [loading, setLoading] = useState(true);
 
     // Review Form State
@@ -23,29 +21,29 @@ export default function MoviePage() {
     const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
-        const fetchMovie = async () => {
+        const fetchShow = async () => {
             try {
-                const res = await axios.get(`${API_BASE_URL}/api/movies/${id}?type=${typeParam}`);
-                setMovie(res.data);
+                const res = await axios.get(`${API_BASE_URL}/api/movies/${id}?type=tv`);
+                setShow(res.data);
             } catch (err) {
                 console.error(err);
             } finally {
                 setLoading(false);
             }
         };
-        if (id) fetchMovie();
-    }, [id, typeParam]);
+        if (id) fetchShow();
+    }, [id]);
 
     const handleReviewSubmit = async (e) => {
         e.preventDefault();
         if (!user) return alert("Please sign in.");
         setSubmitting(true);
         try {
-            await axios.post(`${API_BASE_URL}/api/reviews/${movie.tmdbId}`, {
+            await axios.post(`${API_BASE_URL}/api/reviews/${show.tmdbId}`, {
                 author: user.fullName || user.username || "User",
                 content: reviewContent,
                 rating: reviewRating,
-                type: movie.type
+                type: 'tv'
             });
             alert("Review submitted!");
             setReviewContent('');
@@ -54,9 +52,7 @@ export default function MoviePage() {
     };
 
     if (loading) return <div className="min-h-screen bg-[#0a0a0a] text-white flex justify-center items-center">Loading...</div>;
-    if (!movie) return <div className="min-h-screen bg-[#0a0a0a] text-white flex justify-center items-center">Movie not found</div>;
-
-    const isTv = movie.type === 'tv';
+    if (!show) return <div className="min-h-screen bg-[#0a0a0a] text-white flex justify-center items-center">TV Show not found</div>;
 
     return (
         <div className="min-h-screen bg-[#0a0a0a] text-white font-sans pb-20">
@@ -65,11 +61,11 @@ export default function MoviePage() {
                 {/* --- 1. HEADER SECTION (Title & Ratings) --- */}
                 <div className="flex flex-col md:flex-row justify-between items-start mb-6 gap-4">
                     <div>
-                        <h1 className="text-4xl md:text-5xl font-black text-white mb-2">{movie.title}</h1>
+                        <h1 className="text-4xl md:text-5xl font-black text-white mb-2">{show.title}</h1>
                         <div className="flex flex-wrap items-center gap-4 text-sm text-gray-400">
-                            <span className="uppercase border border-gray-600 px-1 rounded text-xs font-bold">{isTv ? 'TV Series' : 'Movie'}</span>
-                            <span>{movie.releaseYear}</span>
-                            <span>{movie.runtime ? `${movie.runtime} min` : 'N/A'}</span>
+                            <span className="uppercase border border-gray-600 px-1 rounded text-xs font-bold">TV Series</span>
+                            <span>{show.releaseYear}</span>
+                            <span>{show.runtime ? `${show.runtime} min/ep` : 'N/A'}</span>
                         </div>
                     </div>
                     
@@ -80,7 +76,7 @@ export default function MoviePage() {
                             <div className="flex items-center gap-2">
                                 <Star className="text-yellow-400 fill-yellow-400" size={28} />
                                 <div className="flex flex-col">
-                                    <span className="text-xl font-bold text-white">{movie.vote_average?.toFixed(1)}<span className="text-gray-500 text-sm">/10</span></span>
+                                    <span className="text-xl font-bold text-white">{show.vote_average?.toFixed(1)}<span className="text-gray-500 text-sm">/10</span></span>
                                 </div>
                             </div>
                         </div>
@@ -98,7 +94,7 @@ export default function MoviePage() {
                     
                     {/* A. Poster */}
                     <div className="relative group">
-                        <img src={movie.poster_path} alt={movie.title} className="w-full h-auto object-cover rounded shadow-lg" />
+                        <img src={show.poster_path} alt={show.title} className="w-full h-auto object-cover rounded shadow-lg" />
                         <div className="absolute top-0 left-0 bg-black/60 text-white p-1 rounded-br">
                             <Plus className="w-6 h-6" />
                         </div>
@@ -106,10 +102,10 @@ export default function MoviePage() {
 
                     {/* B. Trailer / Video Player */}
                     <div className="bg-black relative group flex items-center justify-center min-h-[400px]">
-                        {movie.trailerKey ? (
+                        {show.trailerKey ? (
                             <iframe 
                                 className="w-full h-full absolute inset-0"
-                                src={`https://www.youtube.com/embed/${movie.trailerKey}?autoplay=0`}
+                                src={`https://www.youtube.com/embed/${show.trailerKey}?autoplay=0`}
                                 title="Trailer"
                                 allowFullScreen
                             />
@@ -125,23 +121,21 @@ export default function MoviePage() {
                     <div className="hidden lg:flex flex-col gap-2">
                          <div className="bg-white/5 p-4 rounded h-full flex flex-col gap-3 border border-white/10">
                              {/* Watchlist Button */}
-                             <WatchlistButton movie={movie} />
+                             <WatchlistButton movie={show} />
                              
                              <div className="mt-4 space-y-4">
                                 <div>
                                     <span className="block text-gray-400 text-xs font-bold mb-1">Genres</span>
                                     <div className="flex flex-wrap gap-2">
-                                        {movie.genres.slice(0, 3).map(g => (
+                                        {show.genres.slice(0, 3).map(g => (
                                             <span key={g} className="border border-white/10 rounded-full px-3 py-1 text-xs hover:bg-white/10 cursor-pointer">{g}</span>
                                         ))}
                                     </div>
                                 </div>
-                                {isTv && (
-                                    <div>
-                                        <span className="block text-gray-400 text-xs font-bold mb-1">Seasons</span>
-                                        <span className="text-white font-bold">{movie.seasons?.length || 1} Seasons</span>
-                                    </div>
-                                )}
+                                <div>
+                                    <span className="block text-gray-400 text-xs font-bold mb-1">Seasons</span>
+                                    <span className="text-white font-bold">{show.seasons?.length || 1} Seasons</span>
+                                </div>
                              </div>
                          </div>
                     </div>
@@ -156,20 +150,20 @@ export default function MoviePage() {
                         {/* Overview */}
                         <section>
                             <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-                                {movie.genres.map(g => (
+                                {show.genres.map(g => (
                                     <span key={g} className="bg-white/5 px-4 py-1 rounded-full text-sm border border-white/10 whitespace-nowrap">{g}</span>
                                 ))}
                             </div>
-                            <p className="text-lg leading-relaxed text-white">{movie.overview}</p>
+                            <p className="text-lg leading-relaxed text-white">{show.overview}</p>
                             
                             <div className="mt-6 border-t border-white/10 pt-4 space-y-3">
                                 <div className="flex gap-4">
-                                    <span className="font-bold text-white min-w-[80px]">{isTv ? 'Creators' : 'Director'}</span>
-                                    <span className="text-cyan-400">{movie.directors.length > 0 ? movie.directors.join(', ') : 'N/A'}</span>
+                                    <span className="font-bold text-white min-w-[80px]">Creators</span>
+                                    <span className="text-cyan-400">{show.directors.length > 0 ? show.directors.join(', ') : 'N/A'}</span>
                                 </div>
                                 <div className="flex gap-4">
                                     <span className="font-bold text-white min-w-[80px]">Writers</span>
-                                    <span className="text-cyan-400">{movie.writers.length > 0 ? movie.writers.join(', ') : 'N/A'}</span>
+                                    <span className="text-cyan-400">{show.writers.length > 0 ? show.writers.join(', ') : 'N/A'}</span>
                                 </div>
                             </div>
                         </section>
@@ -180,7 +174,7 @@ export default function MoviePage() {
                                 Top Cast <ChevronRight className="text-white" />
                             </h3>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 lg:grid-cols-4 gap-4 overflow-x-auto pb-4 snap-x">
-                                {movie.cast.map(actor => (
+                                {show.cast.map(actor => (
                                     <div key={actor.id} className="flex flex-col items-center gap-2 bg-white/5 p-2 rounded hover:bg-white/10 transition min-w-[120px] snap-center">
                                         <img 
                                             src={actor.profile_path || '/placeholder_user.png'} 
@@ -204,7 +198,7 @@ export default function MoviePage() {
                             </div>
                             
                             <div className="space-y-4">
-                                {movie.reviews?.length > 0 ? movie.reviews.map((r, i) => (
+                                {show.reviews?.length > 0 ? show.reviews.map((r, i) => (
                                     <div key={i} className="bg-white/5 p-4 rounded border border-white/10">
                                         <div className="flex justify-between items-start mb-2">
                                             <span className="font-bold text-cyan-400">{r.author}</span>
@@ -243,8 +237,8 @@ export default function MoviePage() {
                         <section>
                             <h3 className="font-bold text-lg mb-4 text-white">More like this</h3>
                             <div className="grid grid-cols-2 gap-3">
-                                {movie.recommendations.slice(0, 6).map(rec => (
-                                    <Link href={`/movie/${rec.tmdbId}?type=${rec.type}`} key={rec.tmdbId} className="group">
+                                {show.recommendations.slice(0, 6).map(rec => (
+                                    <Link href={`/tv/${rec.tmdbId}`} key={rec.tmdbId} className="group">
                                         <div className="relative aspect-[2/3] mb-2">
                                             <img src={rec.poster_path} className="w-full h-full object-cover rounded" alt={rec.title} />
                                             <div className="absolute top-2 right-2 bg-black/60 px-1 rounded flex items-center gap-1">
@@ -258,12 +252,11 @@ export default function MoviePage() {
                             </div>
                         </section>
 
-                        {/* Screenshots (assuming this was in your original; add images if available) */}
+                        {/* Screenshots (add images if available) */}
                         <section>
                             <h3 className="font-bold text-lg mb-4 text-white">Screenshots</h3>
                             <div className="grid grid-cols-2 gap-3">
-                                {/* Add <img> tags here for movie.backdrop_path or other images */}
-                                <img src={movie.backdrop_path || '/placeholder.jpg'} className="w-full h-32 object-cover rounded" alt="Screenshot" />
+                                <img src={show.backdrop_path || '/placeholder.jpg'} className="w-full h-32 object-cover rounded" alt="Screenshot" />
                                 {/* Duplicate for more */}
                             </div>
                         </section>
