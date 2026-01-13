@@ -1,149 +1,157 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
-import { normalizeMediaData } from '@/utils/mediaHelpers'; 
-import Link from 'next/link';
+import { normalizeMediaData } from '@/utils/mediaHelpers'; // Ensure you have the helper from previous steps!
 
 export default function MovieDetailsPage() {
   const { id } = useParams();
   const searchParams = useSearchParams();
-  const type = searchParams.get('type') || 'movie'; 
-  
+  const type = searchParams.get('type') || 'movie';
   const [media, setMedia] = useState(null);
-  const [reviews, setReviews] = useState([]); // State for reviews
 
   useEffect(() => {
     async function fetchData() {
-      // Fetch Details AND Reviews in parallel
-      const [detailsRes, reviewsRes] = await Promise.all([
-        fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${process.env.NEXT_PUBLIC_TMDB_API_KEY}&append_to_response=credits,videos`),
-        fetch(`https://api.themoviedb.org/3/${type}/${id}/reviews?api_key=${process.env.NEXT_PUBLIC_TMDB_API_KEY}`)
-      ]);
-
-      const data = await detailsRes.json();
-      const reviewsData = await reviewsRes.json();
-      
+      if (!id) return;
+      const res = await fetch(`https://api.themoviedb.org/3/${type}/${id}?api_key=${process.env.NEXT_PUBLIC_TMDB_API_KEY}&append_to_response=credits,videos,external_ids`);
+      const data = await res.json();
       setMedia(normalizeMediaData(data, type));
-      setReviews(reviewsData.results || []);
     }
-    if (id) fetchData();
+    fetchData();
   }, [id, type]);
 
-  if (!media) return <div className="min-h-screen bg-[#121212] text-white flex items-center justify-center">Loading...</div>;
+  if (!media) return <div className="bg-[#1F1F1F] min-h-screen text-white p-10">Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white font-sans">
-      
-      {/* --- HERO SECTION (IMDb Style) --- */}
-      <div className="relative w-full h-[600px]">
-        {/* Background Image with Gradient Overlay */}
-        <div className="absolute inset-0">
-            <img src={media.backdrop} className="w-full h-full object-cover opacity-60" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-[#121212]/50 to-transparent" />
+    <div className="min-h-screen bg-[#1F1F1F] text-white font-sans pb-20">
+      <div className="max-w-7xl mx-auto px-4 py-6">
+
+        {/* --- 1. IMDB HEADER (Title / Year / Rating) --- */}
+        <div className="flex justify-between items-start mb-6">
+          <div>
+             <h1 className="text-4xl md:text-5xl font-normal mb-2">{media.title}</h1>
+             <div className="flex gap-4 text-gray-400 text-sm font-bold">
+                <span className="text-gray-300">{media.type === 'tv' ? 'TV Series' : 'Movie'}</span>
+                <span className="text-gray-300">•</span>
+                <span>{media.releaseYear}</span>
+                <span className="text-gray-300">•</span>
+                <span>{media.rating} Rating</span>
+                <span className="text-gray-300">•</span>
+                <span>{media.runtime}</span>
+             </div>
+          </div>
+          
+          {/* RATING BOX (Top Right) */}
+          <div className="hidden md:flex flex-col items-center">
+             <div className="text-gray-400 text-xs tracking-widest uppercase font-bold mb-1">IMDb RATING</div>
+             <div className="flex items-center gap-2">
+                <span className="text-yellow-500 text-4xl">★</span>
+                <div className="flex flex-col">
+                   <span className="text-xl font-bold text-white">{media.rating}/10</span>
+                </div>
+             </div>
+          </div>
         </div>
 
-        {/* Content Container */}
-        <div className="relative z-10 max-w-7xl mx-auto px-6 h-full flex flex-col justify-end pb-12">
-            
-            {/* Title */}
-            <h1 className="text-6xl font-extrabold mb-4 tracking-tight">{media.title}</h1>
-            
-            {/* Metadata Row */}
-            <div className="flex items-center gap-6 text-sm font-medium text-gray-300 mb-6">
-                <div className="flex flex-col">
-                    <span className="text-gray-500 text-xs uppercase">Type</span>
-                    <span className="text-white capitalize">{media.type === 'tv' ? 'TV Series' : 'Movie'}</span>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-gray-500 text-xs uppercase">{media.type === 'tv' ? 'Creator' : 'Director'}</span>
-                    <span className="text-white">{media.director}</span>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-gray-500 text-xs uppercase">Release</span>
-                    <span className="text-white">{media.releaseYear}</span>
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-gray-500 text-xs uppercase">Rating</span>
-                    <span className="text-yellow-400 flex items-center gap-1">★ {media.rating}</span>
-                </div>
-            </div>
+        {/* --- 2. THE MEDIA GRID (Poster | Trailer | Sidebar) --- */}
+        <div className="grid grid-cols-1 md:grid-cols-[280px_1fr_250px] gap-2 mb-8">
+           
+           {/* COL 1: POSTER */}
+           <div className="relative">
+              <img src={media.poster} alt={media.title} className="w-full rounded shadow-lg" />
+              {/* Mobile Watchlist Button (only visible on small screens) */}
+              <button className="md:hidden mt-2 w-full bg-[#2C2C2C] text-blue-400 py-2 font-bold rounded flex items-center justify-center gap-2">
+                 + Add to Watchlist
+              </button>
+           </div>
 
-            {/* Overview */}
-            <p className="max-w-3xl text-lg text-gray-300 leading-relaxed mb-8">
-                {media.overview}
-            </p>
-
-            {/* Buttons (Restoring your exact buttons) */}
-            <div className="flex items-center gap-4">
-                <a 
-                    href={`https://www.youtube.com/watch?v=${media.trailerKey}`} 
-                    target="_blank"
-                    className="bg-[#E50914] hover:bg-red-700 text-white px-8 py-3 rounded-full font-bold transition flex items-center gap-2"
-                >
-                   <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                   Watch Trailer
-                </a>
-                
-                <button className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white px-8 py-3 rounded-full font-bold border border-white/20 transition flex items-center gap-2">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/></svg>
-                    Add to List
-                </button>
-            </div>
-        </div>
-      </div>
-
-      {/* --- CONTENT BODY --- */}
-      <div className="max-w-7xl mx-auto px-6 py-12 space-y-16">
-        
-        {/* Seasons (Only if TV) */}
-        {media.seasons && media.seasons.length > 0 && (
-            <section>
-                <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                   <span className="w-1 h-8 bg-[#E50914] block rounded-full"></span> 
-                   Seasons
-                </h3>
-                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-                    {media.seasons.map(season => (
-                       season.poster_path && (
-                        <div key={season.id} className="min-w-[160px] group cursor-pointer">
-                            <div className="rounded-xl overflow-hidden mb-2 relative">
-                                <img src={`https://image.tmdb.org/t/p/w300${season.poster_path}`} className="w-full h-auto transition group-hover:scale-105 duration-300"/>
-                            </div>
-                            <h4 className="font-bold text-gray-200">{season.name}</h4>
-                            <p className="text-sm text-gray-500">{season.episode_count} Episodes</p>
-                        </div>
-                       )
-                    ))}
-                </div>
-            </section>
-        )}
-
-        {/* --- AUDIENCE REVIEWS (Restored from Screenshot) --- */}
-        <section>
-             <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
-                <span className="w-1 h-8 bg-green-500 block rounded-full"></span> 
-                Audience Reviews
-             </h3>
-             
-             {reviews.length > 0 ? (
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {reviews.slice(0, 4).map(review => (
-                        <div key={review.id} className="bg-[#1F1F1F] p-6 rounded-xl border border-gray-800">
-                            <div className="flex justify-between items-start mb-4">
-                                <h4 className="font-bold text-[#3B82F6]">{review.author}</h4>
-                                <span className="bg-gray-800 px-2 py-1 rounded text-xs text-yellow-500 font-bold">★ {review.author_details?.rating || '?'} / 10</span>
-                            </div>
-                            <p className="text-gray-400 text-sm line-clamp-4 leading-relaxed">
-                                {review.content}
-                            </p>
-                            <a href={review.url} target="_blank" className="text-xs text-gray-500 mt-4 block hover:text-white transition">Read full review</a>
-                        </div>
-                    ))}
+           {/* COL 2: TRAILER / VIDEO HERO */}
+           <div className="bg-black flex items-center justify-center relative min-h-[400px]">
+              {media.trailerKey ? (
+                 <iframe 
+                   className="w-full h-full absolute inset-0"
+                   src={`https://www.youtube.com/embed/${media.trailerKey}?autoplay=0&controls=1`}
+                   allowFullScreen
+                 ></iframe>
+              ) : (
+                 <div className="flex flex-col items-center gap-4 text-gray-500">
+                    <span className="text-4xl">🎬</span>
+                    <p>No Trailer Available</p>
                  </div>
-             ) : (
-                 <p className="text-gray-500 italic">No reviews yet.</p>
-             )}
-        </section>
+              )}
+           </div>
+
+           {/* COL 3: QUICK ACTIONS SIDEBAR */}
+           <div className="hidden md:flex flex-col gap-2">
+              <div className="bg-[#2C2C2C] p-4 rounded h-full flex flex-col gap-4">
+                 <div className="bg-[#383838] p-3 rounded flex items-center gap-3 cursor-pointer hover:bg-[#424242] transition">
+                    <div className="bg-yellow-500 text-black p-1 rounded font-bold text-xs">Videos</div>
+                    <span className="font-bold text-sm">3 Videos</span>
+                 </div>
+                 <div className="bg-[#383838] p-3 rounded flex items-center gap-3 cursor-pointer hover:bg-[#424242] transition">
+                    <div className="bg-yellow-500 text-black p-1 rounded font-bold text-xs">Photos</div>
+                    <span className="font-bold text-sm">12 Photos</span>
+                 </div>
+              </div>
+           </div>
+        </div>
+
+        {/* --- 3. MAIN ACTION & SYNOPSIS --- */}
+        <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr] gap-10">
+           
+           {/* LEFT COLUMN: Story & Cast */}
+           <div>
+              {/* Categories / Genres Chips */}
+              <div className="flex gap-2 mb-6">
+                 <span className="border border-gray-600 rounded-full px-4 py-1 text-sm text-gray-300 hover:bg-gray-800 cursor-pointer">Action</span>
+                 <span className="border border-gray-600 rounded-full px-4 py-1 text-sm text-gray-300 hover:bg-gray-800 cursor-pointer">Adventure</span>
+                 <span className="border border-gray-600 rounded-full px-4 py-1 text-sm text-gray-300 hover:bg-gray-800 cursor-pointer">Animation</span>
+              </div>
+
+              <p className="text-lg leading-relaxed text-white mb-8">
+                 {media.overview}
+              </p>
+
+              <div className="border-t border-gray-700 py-4">
+                 <span className="font-bold mr-2 text-white">Director</span>
+                 <span className="text-blue-400">{media.director}</span>
+              </div>
+              <div className="border-t border-gray-700 py-4">
+                 <span className="font-bold mr-2 text-white">Status</span>
+                 <span className="text-blue-400">{media.status || 'Released'}</span>
+              </div>
+              
+              {/* SEASONS (If TV) */}
+              {media.seasons && (
+                <div className="mt-8">
+                  <h3 className="text-2xl font-bold text-yellow-500 mb-4 border-l-4 border-yellow-500 pl-3">Seasons</h3>
+                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+                    {media.seasons.map(season => (
+                      <div key={season.id} className="min-w-[120px] text-center">
+                        <img src={`https://image.tmdb.org/t/p/w200${season.poster_path}`} className="rounded mb-2"/>
+                        <p className="text-sm font-bold">{season.name}</p>
+                        <p className="text-xs text-gray-500">{season.episode_count} Eps</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+           </div>
+
+           {/* RIGHT COLUMN: Watchlist Button (Sticky) */}
+           <div>
+              <button className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold text-lg py-3 rounded flex items-center justify-center gap-2 mb-4 transition">
+                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
+                 Add to Watchlist
+              </button>
+              
+              <div className="bg-yellow-500/10 border border-yellow-500/30 p-4 rounded">
+                 <h4 className="font-bold text-yellow-500 mb-2">My Review</h4>
+                 <p className="text-sm text-gray-400 mb-4">You haven't rated this yet.</p>
+                 <button className="text-blue-400 text-sm font-bold hover:underline">Rate this now</button>
+              </div>
+           </div>
+
+        </div>
 
       </div>
     </div>
